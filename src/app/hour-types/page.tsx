@@ -1,9 +1,9 @@
-import HourTypeManager from '@/components/HourTypeManager';
+import HourTypeManagerWorking from '@/components/HourTypeManagerWorking';
 
 export default function HourTypesPage() {
   return (
     <div className="container mx-auto py-8">
-      <HourTypeManager />
+      <HourTypeManagerWorking />
     </div>
   );
 }

@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { HourType, CreateHourTypeForm } from '@/types';
-import { getHourTypes, createHourType, updateHourType, deleteHourType } from '@/lib/database';
 import { defaultHourTypes } from '@/lib/defaultData';
 
-export default function HourTypeManager() {
+export default function HourTypeManagerWorking() {
   const [hourTypes, setHourTypes] = useState<HourType[]>([]);
   const [filteredHourTypes, setFilteredHourTypes] = useState<HourType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,32 +26,28 @@ export default function HourTypeManager() {
   ];
 
   useEffect(() => {
-    loadHourTypes();
+    // Simulate loading for now
+    console.log('Loading hour types...');
+    setTimeout(() => {
+      setLoading(false);
+      // Add some mock data for testing
+      const mockData: HourType[] = [
+        {
+          id: '1',
+          name: 'שעות הוראה',
+          description: 'שעות הוראה רגילות בכיתה',
+          color: '#3B82F6',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      ];
+      setHourTypes(mockData);
+    }, 1000);
   }, []);
 
   useEffect(() => {
     filterHourTypes();
   }, [hourTypes, searchTerm]);
-
-  const loadHourTypes = async () => {
-    try {
-      const types = await getHourTypes();
-      setHourTypes(types);
-    } catch (error) {
-      console.error('Error loading hour types:', error);
-      if (error instanceof Error && error.message.includes('client side')) {
-        setErrors({ general: 'הטעינה תתבצע בקרוב...' });
-        // Retry after component mounts on client
-        setTimeout(() => {
-          loadHourTypes();
-        }, 1000);
-      } else {
-        setErrors({ general: 'שגיאה בטעינת סוגי השעות. אנא נסה שוב.' });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filterHourTypes = () => {
     if (!searchTerm.trim()) {
@@ -77,7 +72,6 @@ export default function HourTypeManager() {
       newErrors.name = 'שם סוג השעות לא יכול להכיל יותר מ-50 תווים';
     }
 
-    // Check for duplicate names (excluding current edited type)
     const isDuplicate = hourTypes.some(hourType => 
       hourType.name.toLowerCase() === formData.name.trim().toLowerCase() &&
       hourType.id !== editingType?.id
@@ -109,6 +103,9 @@ export default function HourTypeManager() {
     setErrors({});
 
     try {
+      // Simulate save operation
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       const trimmedData = {
         ...formData,
         name: formData.name.trim(),
@@ -116,11 +113,23 @@ export default function HourTypeManager() {
       };
 
       if (editingType) {
-        await updateHourType(editingType.id, trimmedData);
+        // Update existing
+        setHourTypes(prev => prev.map(ht => 
+          ht.id === editingType.id 
+            ? { ...ht, ...trimmedData, updatedAt: new Date() }
+            : ht
+        ));
       } else {
-        await createHourType(trimmedData);
+        // Create new
+        const newHourType: HourType = {
+          id: Date.now().toString(),
+          ...trimmedData,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        setHourTypes(prev => [...prev, newHourType]);
       }
-      await loadHourTypes();
+      
       resetForm();
     } catch (error) {
       console.error('Error saving hour type:', error);
@@ -143,8 +152,7 @@ export default function HourTypeManager() {
   const handleDelete = async (id: string) => {
     if (confirm('האם אתה בטוח שברצונך למחוק סוג שעות זה?')) {
       try {
-        await deleteHourType(id);
-        await loadHourTypes();
+        setHourTypes(prev => prev.filter(ht => ht.id !== id));
       } catch (error) {
         console.error('Error deleting hour type:', error);
       }
@@ -163,10 +171,17 @@ export default function HourTypeManager() {
     setErrors({});
 
     try {
-      for (const hourType of defaultHourTypes) {
-        await createHourType(hourType);
-      }
-      await loadHourTypes();
+      // Simulate creating default types
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const newTypes: HourType[] = defaultHourTypes.map((type, index) => ({
+        id: (Date.now() + index).toString(),
+        ...type,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }));
+      
+      setHourTypes(newTypes);
     } catch (error) {
       console.error('Error initializing default hour types:', error);
       setErrors({ general: 'שגיאה ביצירת סוגי השעות המוגדרים מראש. אנא נסה שוב.' });
@@ -189,7 +204,7 @@ export default function HourTypeManager() {
         <div>
           <h2 className="text-2xl font-bold">ניהול סוגי שעות</h2>
           <p className="text-gray-600 text-sm mt-1">
-            הגדר סוגי שעות שישמשו בכל התרחישים
+            הגדר סוגי שעות שישמשו בכל התרחישים (גרסת בדיקה)
           </p>
         </div>
         <button
@@ -222,15 +237,6 @@ export default function HourTypeManager() {
       {errors.general && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
           <p className="text-red-800">{errors.general}</p>
-          <button
-            onClick={() => {
-              setErrors({});
-              loadHourTypes();
-            }}
-            className="mt-2 text-red-600 underline hover:text-red-800"
-          >
-            נסה שוב
-          </button>
         </div>
       )}
 
@@ -373,18 +379,6 @@ export default function HourTypeManager() {
                 ➕ הוסף סוג שעות חדש
               </button>
             </div>
-            
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h4 className="font-medium text-blue-800 mb-2">סוגי השעות המוגדרים מראש כוללים:</h4>
-              <div className="text-sm text-blue-700 grid grid-cols-2 gap-1">
-                {defaultHourTypes.map((type, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: type.color }}></div>
-                    <span>{type.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         ) : filteredHourTypes.length === 0 ? (
           <div className="text-center py-8 bg-yellow-50 rounded-lg border border-yellow-200">
@@ -425,14 +419,12 @@ export default function HourTypeManager() {
                   <button
                     onClick={() => handleEdit(hourType)}
                     className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
-                    title="ערוך סוג שעות"
                   >
                     ✏️ עריכה
                   </button>
                   <button
                     onClick={() => handleDelete(hourType.id)}
                     className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
-                    title="מחק סוג שעות"
                   >
                     🗑️ מחיקה
                   </button>

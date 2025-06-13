@@ -23,6 +23,9 @@ import {
 
 // Database availability check
 const checkDatabase = () => {
+  if (typeof window === 'undefined') {
+    throw new Error('Database operations can only be performed on the client side.');
+  }
   if (!db) {
     throw new Error('Firebase not initialized. Please configure Firebase to use database features.');
   }
