@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HourType, CreateHourTypeForm } from '@/types';
-import { defaultHourTypes } from '@/lib/defaultData';
+import { useHourTypes } from '@/contexts/HourTypesContext';
 
 export default function HourTypeManagerWorking() {
-  const [hourTypes, setHourTypes] = useState<HourType[]>([]);
+  const {
+    hourTypes,
+    loading,
+    error: contextError,
+    createHourType: contextCreateHourType,
+    updateHourType: contextUpdateHourType,
+    deleteHourType: contextDeleteHourType,
+    initializeDefaultHourTypes: contextInitializeDefaults
+  } = useHourTypes();
+
   const [filteredHourTypes, setFilteredHourTypes] = useState<HourType[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingType, setEditingType] = useState<HourType | null>(null);
@@ -18,6 +26,9 @@ export default function HourTypeManagerWorking() {
     description: '',
     color: '#3B82F6'
   });
+  
+  // Ref for the form element
+  const formRef = useRef<HTMLDivElement>(null);
 
   const colors = [
     '#3B82F6', '#EF4444', '#10B981', '#F59E0B', 
@@ -26,28 +37,14 @@ export default function HourTypeManagerWorking() {
   ];
 
   useEffect(() => {
-    // Simulate loading for now
-    console.log('Loading hour types...');
-    setTimeout(() => {
-      setLoading(false);
-      // Add some mock data for testing
-      const mockData: HourType[] = [
-        {
-          id: '1',
-          name: 'שעות הוראה',
-          description: 'שעות הוראה רגילות בכיתה',
-          color: '#3B82F6',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
-      ];
-      setHourTypes(mockData);
-    }, 1000);
-  }, []);
-
-  useEffect(() => {
     filterHourTypes();
   }, [hourTypes, searchTerm]);
+
+  useEffect(() => {
+    if (contextError) {
+      setErrors({ general: contextError });
+    }
+  }, [contextError]);
 
   const filterHourTypes = () => {
     if (!searchTerm.trim()) {
@@ -103,9 +100,6 @@ export default function HourTypeManagerWorking() {
     setErrors({});
 
     try {
-      // Simulate save operation
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
       const trimmedData = {
         ...formData,
         name: formData.name.trim(),
@@ -113,27 +107,15 @@ export default function HourTypeManagerWorking() {
       };
 
       if (editingType) {
-        // Update existing
-        setHourTypes(prev => prev.map(ht => 
-          ht.id === editingType.id 
-            ? { ...ht, ...trimmedData, updatedAt: new Date() }
-            : ht
-        ));
+        await contextUpdateHourType(editingType.id, trimmedData);
       } else {
-        // Create new
-        const newHourType: HourType = {
-          id: Date.now().toString(),
-          ...trimmedData,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-        setHourTypes(prev => [...prev, newHourType]);
+        await contextCreateHourType(trimmedData);
       }
       
       resetForm();
     } catch (error) {
       console.error('Error saving hour type:', error);
-      setErrors({ general: 'שגיאה בשמירת סוג השעות. אנא נסה שוב.' });
+      setErrors({ general: error instanceof Error ? error.message : 'שגיאה בשמירת סוג השעות. אנא נסה שוב.' });
     } finally {
       setSaving(false);
     }
@@ -147,14 +129,23 @@ export default function HourTypeManagerWorking() {
       color: hourType.color
     });
     setShowForm(true);
+    
+    // Scroll to form after it's shown
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }, 100);
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('האם אתה בטוח שברצונך למחוק סוג שעות זה?')) {
       try {
-        setHourTypes(prev => prev.filter(ht => ht.id !== id));
+        await contextDeleteHourType(id);
       } catch (error) {
         console.error('Error deleting hour type:', error);
+        setErrors({ general: error instanceof Error ? error.message : 'שגיאה במחיקת סוג השעות. אנא נסה שוב.' });
       }
     }
   };
@@ -171,20 +162,10 @@ export default function HourTypeManagerWorking() {
     setErrors({});
 
     try {
-      // Simulate creating default types
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newTypes: HourType[] = defaultHourTypes.map((type, index) => ({
-        id: (Date.now() + index).toString(),
-        ...type,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }));
-      
-      setHourTypes(newTypes);
+      await contextInitializeDefaults();
     } catch (error) {
       console.error('Error initializing default hour types:', error);
-      setErrors({ general: 'שגיאה ביצירת סוגי השעות המוגדרים מראש. אנא נסה שוב.' });
+      setErrors({ general: error instanceof Error ? error.message : 'שגיאה ביצירת סוגי השעות המוגדרים מראש. אנא נסה שוב.' });
     } finally {
       setSaving(false);
     }
@@ -241,7 +222,7 @@ export default function HourTypeManagerWorking() {
       )}
 
       {showForm && (
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6 border">
+        <div ref={formRef} className="bg-white p-6 rounded-lg shadow-md mb-6 border">
           <h3 className="text-lg font-semibold mb-4">
             {editingType ? 'עריכת סוג שעות' : 'הוספת סוג שעות חדש'}
           </h3>

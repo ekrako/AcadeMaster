@@ -36,11 +36,11 @@ export interface Teacher {
   id: string;
   name: string;
   email?: string;
-  qualifications: string[];
-  specializations: string[];
-  maxWeeklyHours: number;
-  allocatedHours: TeacherAllocation[];
-  totalAllocatedHours: number; // calculated field
+  phone?: string;
+  idNumber: string; // ID number (was employeeId)
+  subject?: string;
+  maxHours: number;
+  allocatedHours: number;
 }
 
 // Teacher's allocated hours by type
@@ -52,12 +52,11 @@ export interface TeacherAllocation {
 // Class within a scenario
 export interface Class {
   id: string;
+  name: string;
   grade: string; // e.g., "א", "ב", "ג"
-  section?: string; // e.g., "1", "2"
-  subject: string;
-  requiredHours: ClassRequirement[];
-  totalRequiredHours: number; // calculated field
-  assignedTeacherId?: string;
+  studentCount: number;
+  homeroomTeacherId?: string;
+  isSpecialEducation?: boolean;
 }
 
 // Class requirements by hour type

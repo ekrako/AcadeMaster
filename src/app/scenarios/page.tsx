@@ -1,9 +1,9 @@
-import ScenarioManager from '@/components/ScenarioManager';
+import ScenarioManagerWorking from '@/components/ScenarioManagerWorking';
 
 export default function ScenariosPage() {
   return (
     <div className="container mx-auto py-8">
-      <ScenarioManager />
+      <ScenarioManagerWorking />
     </div>
   );
 }
