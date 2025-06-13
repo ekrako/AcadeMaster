@@ -24,7 +24,8 @@ export default function HourTypeManagerWorking() {
   const [formData, setFormData] = useState<CreateHourTypeForm>({
     name: '',
     description: '',
-    color: '#3B82F6'
+    color: '#3B82F6',
+    isClassHour: false
   });
   
   // Ref for the form element
@@ -38,7 +39,7 @@ export default function HourTypeManagerWorking() {
 
   useEffect(() => {
     filterHourTypes();
-  }, [hourTypes, searchTerm]);
+  }, [hourTypes, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (contextError) {
@@ -126,7 +127,8 @@ export default function HourTypeManagerWorking() {
     setFormData({
       name: hourType.name,
       description: hourType.description || '',
-      color: hourType.color
+      color: hourType.color,
+      isClassHour: hourType.isClassHour || false
     });
     setShowForm(true);
     
@@ -151,7 +153,7 @@ export default function HourTypeManagerWorking() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', color: '#3B82F6' });
+    setFormData({ name: '', description: '', color: '#3B82F6', isClassHour: false });
     setEditingType(null);
     setShowForm(false);
     setErrors({});
@@ -299,6 +301,21 @@ export default function HourTypeManagerWorking() {
               )}
             </div>
 
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.isClassHour}
+                  onChange={(e) => setFormData({ ...formData, isClassHour: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium">שעות כיתה</span>
+              </label>
+              <p className="text-gray-500 text-xs mt-1">
+                סמן אם סוג השעות הזה דורש הקצאה לכיתה ספציפית
+              </p>
+            </div>
+
             <div className="flex gap-3 pt-4 border-t">
               <button
                 type="submit"
@@ -383,7 +400,14 @@ export default function HourTypeManagerWorking() {
                     style={{ backgroundColor: hourType.color }}
                   />
                   <div className="flex-1">
-                    <h3 className="font-semibold text-lg text-gray-900">{hourType.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg text-gray-900">{hourType.name}</h3>
+                      {hourType.isClassHour && (
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          שעות כיתה
+                        </span>
+                      )}
+                    </div>
                     {hourType.description && (
                       <p className="text-gray-600 text-sm mt-1">{hourType.description}</p>
                     )}

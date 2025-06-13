@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation';
 import TeacherManagerWorking from '@/components/TeacherManagerWorking';
 import ClassManagerWorking from '@/components/ClassManagerWorking';
 import ScenarioEditForm from '@/components/ScenarioEditForm';
+import AllocationManagerWorking from '@/components/AllocationManagerWorking';
+import ClassAllocationDisplay from '@/components/ClassAllocationDisplay';
 import { Scenario, Teacher, Class, HourBank } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
 
@@ -15,12 +17,12 @@ export default function ScenarioDetailPage() {
   const { hourTypes } = useHourTypes();
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'classes' | 'allocations' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'classes' | 'allocations' | 'class-view' | 'reports'>('overview');
   const [showEditForm, setShowEditForm] = useState(false);
 
   useEffect(() => {
     loadScenario();
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadScenario = async () => {
     try {
@@ -228,6 +230,16 @@ export default function ScenarioDetailPage() {
             הקצאות ({scenario.allocations.length})
           </button>
           <button
+            onClick={() => setActiveTab('class-view')}
+            className={`pb-3 px-1 border-b-2 transition-colors ${
+              activeTab === 'class-view'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            תצוגת כיתות
+          </button>
+          <button
             onClick={() => setActiveTab('reports')}
             className={`pb-3 px-1 border-b-2 transition-colors ${
               activeTab === 'reports'
@@ -261,21 +273,30 @@ export default function ScenarioDetailPage() {
             <div className="bg-white p-6 rounded-lg shadow-md border">
               <h2 className="text-xl font-semibold mb-4">סקירת התרחיש</h2>
               <div className="grid md:grid-cols-3 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
+                <button
+                  onClick={() => setActiveTab('teachers')}
+                  className="bg-blue-50 p-4 rounded-lg hover:bg-blue-100 transition-colors text-right cursor-pointer border-2 border-transparent hover:border-blue-200"
+                >
                   <h3 className="font-medium text-blue-800">מורים</h3>
                   <div className="text-2xl font-bold text-blue-600">{scenario.teachers.length}</div>
                   <p className="text-sm text-blue-600">רשומים בתרחיש</p>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
+                </button>
+                <button
+                  onClick={() => setActiveTab('classes')}
+                  className="bg-green-50 p-4 rounded-lg hover:bg-green-100 transition-colors text-right cursor-pointer border-2 border-transparent hover:border-green-200"
+                >
                   <h3 className="font-medium text-green-800">כיתות</h3>
                   <div className="text-2xl font-bold text-green-600">{scenario.classes.length}</div>
                   <p className="text-sm text-green-600">מוגדרות בתרחיש</p>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
+                </button>
+                <button
+                  onClick={() => setActiveTab('allocations')}
+                  className="bg-purple-50 p-4 rounded-lg hover:bg-purple-100 transition-colors text-right cursor-pointer border-2 border-transparent hover:border-purple-200"
+                >
                   <h3 className="font-medium text-purple-800">הקצאות</h3>
                   <div className="text-2xl font-bold text-purple-600">{scenario.allocations.length}</div>
                   <p className="text-sm text-purple-600">הקצאות פעילות</p>
-                </div>
+                </button>
               </div>
             </div>
 
@@ -367,6 +388,8 @@ export default function ScenarioDetailPage() {
               scenarioId={scenario.id}
               teachers={scenario.teachers}
               onUpdate={handleTeachersUpdate}
+              scenario={scenario}
+              onScenarioUpdate={handleScenarioUpdate}
             />
           </div>
         )}
@@ -377,17 +400,23 @@ export default function ScenarioDetailPage() {
               scenarioId={scenario.id}
               classes={scenario.classes}
               onUpdate={handleClassesUpdate}
+              teachers={scenario.teachers}
             />
           </div>
         )}
 
         {activeTab === 'allocations' && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-            <div className="text-yellow-600 text-4xl mb-4">🚧</div>
-            <h3 className="text-xl font-semibold text-yellow-800 mb-2">בפיתוח</h3>
-            <p className="text-yellow-700">
-              ממשק הקצאת השעות יהיה זמין בקרוב.
-            </p>
+          <div className="bg-white p-6 rounded-lg shadow-md border">
+            <AllocationManagerWorking
+              scenario={scenario}
+              onUpdate={handleScenarioUpdate}
+            />
+          </div>
+        )}
+
+        {activeTab === 'class-view' && (
+          <div className="bg-white p-6 rounded-lg shadow-md border">
+            <ClassAllocationDisplay scenario={scenario} />
           </div>
         )}
 

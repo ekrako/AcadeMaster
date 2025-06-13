@@ -43,7 +43,7 @@ export default function HourTypeManagerDebug() {
     };
     
     testSteps();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!mounted) {
     return (

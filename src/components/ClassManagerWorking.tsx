@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Class } from '@/types';
+import { Class, Teacher } from '@/types';
 
 interface ClassManagerWorkingProps {
   scenarioId: string;
   classes: Class[];
   onUpdate: (classes: Class[]) => void;
+  teachers?: Teacher[];
 }
 
-export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: ClassManagerWorkingProps) {
+export default function ClassManagerWorking({ scenarioId, classes, onUpdate, teachers = [] }: ClassManagerWorkingProps) {
   const [localClasses, setLocalClasses] = useState<Class[]>(classes);
   const [filteredClasses, setFilteredClasses] = useState<Class[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -34,7 +35,7 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
 
   useEffect(() => {
     filterClasses();
-  }, [localClasses, searchTerm]);
+  }, [localClasses, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filterClasses = () => {
     if (!searchTerm.trim()) {
@@ -73,6 +74,19 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
 
     if (formData.studentCount < 1 || formData.studentCount > 50) {
       newErrors.studentCount = 'מספר תלמידים חייב להיות בין 1 ל-50';
+    }
+
+    // Validate homeroom teacher limit (max 2 classes per teacher)
+    if (formData.homeroomTeacherId) {
+      const currentHomeroomCount = localClasses.filter(cls => 
+        cls.homeroomTeacherId === formData.homeroomTeacherId &&
+        cls.id !== editingClass?.id
+      ).length;
+      
+      if (currentHomeroomCount >= 2) {
+        const teacher = teachers.find(t => t.id === formData.homeroomTeacherId);
+        newErrors.homeroomTeacherId = `${teacher?.name || 'המורה'} כבר משמש כמחנך ל-2 כיתות (מקסימום מותר)`;
+      }
     }
 
     setErrors(newErrors);
@@ -155,6 +169,12 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
     setErrors({});
   };
 
+  const getTeacherName = (teacherId: string): string => {
+    if (!teacherId) return 'לא מוגדר';
+    const teacher = teachers.find(t => t.id === teacherId);
+    return teacher?.name || 'לא נמצא';
+  };
+
   // Group classes by grade
   const classesByGrade = filteredClasses.reduce((acc, cls) => {
     if (!acc[cls.grade]) {
@@ -211,7 +231,7 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
           </h4>
           
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">שם הכיתה *</label>
                 <input
@@ -268,6 +288,41 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
                 {errors.studentCount && (
                   <p className="text-red-600 text-sm mt-1">{errors.studentCount}</p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">מחנך</label>
+                <select
+                  value={formData.homeroomTeacherId}
+                  onChange={(e) => setFormData({ ...formData, homeroomTeacherId: e.target.value })}
+                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                    errors.homeroomTeacherId ? 'border-red-500 bg-red-50' : ''
+                  }`}
+                >
+                  <option value="">לא מוגדר</option>
+                  {teachers.map(teacher => {
+                    const homeroomCount = localClasses.filter(cls => 
+                      cls.homeroomTeacherId === teacher.id &&
+                      cls.id !== editingClass?.id
+                    ).length;
+                    
+                    return (
+                      <option 
+                        key={teacher.id} 
+                        value={teacher.id}
+                        disabled={homeroomCount >= 2}
+                      >
+                        {teacher.name} {homeroomCount >= 2 ? '(מקסימום כיתות)' : homeroomCount === 1 ? '(1 כיתה)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                {errors.homeroomTeacherId && (
+                  <p className="text-red-600 text-sm mt-1">{errors.homeroomTeacherId}</p>
+                )}
+                <p className="text-gray-500 text-xs mt-1">
+                  בחר מורה שישמש כמחנך של הכיתה (מקסימום 2 כיתות למורה)
+                </p>
               </div>
             </div>
 
@@ -382,6 +437,12 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
                                 </span>
                               )}
                             </div>
+                            <div className="mt-1 text-sm text-gray-600">
+                              <span className="text-gray-500">מחנך:</span>
+                              <span className="mr-1 font-medium text-blue-600">
+                                {cls.homeroomTeacherId ? getTeacherName(cls.homeroomTeacherId) : 'לא מוגדר'}
+                              </span>
+                            </div>
                           </div>
                           
                           <div className="flex gap-2 mr-4">
@@ -410,7 +471,7 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
 
       {filteredClasses.length > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 text-sm">
             <div>
               <span className="text-green-800">סה״כ כיתות:</span>
               <strong className="text-green-900 mr-1">{localClasses.length}</strong>
@@ -431,6 +492,18 @@ export default function ClassManagerWorking({ scenarioId, classes, onUpdate }: C
               <span className="text-green-800">סה״כ תלמידים:</span>
               <strong className="text-green-900 mr-1">
                 {localClasses.reduce((sum, cls) => sum + cls.studentCount, 0)}
+              </strong>
+            </div>
+            <div>
+              <span className="text-blue-800">עם מחנך:</span>
+              <strong className="text-blue-900 mr-1">
+                {localClasses.filter(cls => cls.homeroomTeacherId).length}
+              </strong>
+            </div>
+            <div>
+              <span className="text-orange-800">ללא מחנך:</span>
+              <strong className="text-orange-900 mr-1">
+                {localClasses.filter(cls => !cls.homeroomTeacherId).length}
               </strong>
             </div>
             {searchTerm && (

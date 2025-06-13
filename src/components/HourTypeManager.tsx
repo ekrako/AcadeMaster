@@ -28,11 +28,11 @@ export default function HourTypeManager() {
 
   useEffect(() => {
     loadHourTypes();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     filterHourTypes();
-  }, [hourTypes, searchTerm]);
+  }, [hourTypes, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHourTypes = async () => {
     try {

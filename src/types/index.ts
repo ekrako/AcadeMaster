@@ -4,6 +4,7 @@ export interface HourType {
   name: string;
   description?: string;
   color: string; // Hex color for UI
+  isClassHour?: boolean; // Whether this hour type requires class assignment
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,11 +66,12 @@ export interface ClassRequirement {
   hours: number;
 }
 
-// Allocation - connects teacher to class using specific hour type
+// Allocation - connects teacher to class(es) using specific hour type
 export interface Allocation {
   id: string;
   teacherId: string;
-  classId: string;
+  classId: string; // Can be empty for general allocation (deprecated, use classIds)
+  classIds?: string[]; // Multiple classes for this allocation
   hourTypeId: string;
   hours: number;
   createdAt: Date;
@@ -129,6 +131,7 @@ export interface CreateHourTypeForm {
   name: string;
   description?: string;
   color: string;
+  isClassHour?: boolean;
 }
 
 export interface CreateTeacherForm {

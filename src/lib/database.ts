@@ -122,11 +122,13 @@ export const calculateRemainingHours = (hourBank: HourBank): number => {
 };
 
 export const calculateTeacherTotalHours = (teacher: Teacher): number => {
-  return teacher.allocatedHours.reduce((total, allocation) => total + allocation.hours, 0);
+  return teacher.allocatedHours;
 };
 
-export const calculateClassTotalHours = (classData: Class): number => {
-  return classData.requiredHours.reduce((total, requirement) => total + requirement.hours, 0);
+export const calculateClassTotalHours = (classData: Class, allocations: Allocation[]): number => {
+  return allocations
+    .filter(allocation => allocation.classId === classData.id)
+    .reduce((total, allocation) => total + allocation.hours, 0);
 };
 
 // Hour bank management

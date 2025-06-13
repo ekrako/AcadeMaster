@@ -22,7 +22,7 @@ export default function ScenarioManagerWorking() {
     if (!hourTypesLoading && hourTypes.length >= 0) {
       loadData();
     }
-  }, [hourTypes, hourTypesLoading]);
+  }, [hourTypes, hourTypesLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = async () => {
     try {
@@ -220,11 +220,13 @@ export default function ScenarioManagerWorking() {
   };
 
   const handleDuplicate = async (scenario: Scenario) => {
+    const timestamp = Date.now();
+    
     // Create hour banks based on current hour types, preserving quantities from original
     const newHourBanks: HourBank[] = hourTypes.map(hourType => {
       const originalBank = scenario.hourBanks.find(bank => bank.hourTypeId === hourType.id);
       return {
-        id: `${Date.now()}-${hourType.id}`,
+        id: `${timestamp}-bank-${hourType.id}`,
         hourTypeId: hourType.id,
         totalHours: originalBank?.totalHours || 0,
         allocatedHours: 0,
@@ -232,20 +234,80 @@ export default function ScenarioManagerWorking() {
       };
     });
 
+    // Duplicate teachers with new IDs but preserve allocated hours structure
+    const duplicatedTeachers = scenario.teachers.map(teacher => ({
+      ...teacher,
+      id: `${timestamp}-teacher-${Math.random().toString(36).substr(2, 9)}`,
+      allocatedHours: 0 // Reset allocated hours since allocations will be reset
+    }));
+
+    // Duplicate classes with new IDs
+    const duplicatedClasses = scenario.classes.map(cls => ({
+      ...cls,
+      id: `${timestamp}-class-${Math.random().toString(36).substr(2, 9)}`
+    }));
+
+    // Create teacher ID mapping for allocations
+    const teacherIdMap = new Map<string, string>();
+    scenario.teachers.forEach((originalTeacher, index) => {
+      teacherIdMap.set(originalTeacher.id, duplicatedTeachers[index].id);
+    });
+
+    // Create class ID mapping for allocations
+    const classIdMap = new Map<string, string>();
+    scenario.classes.forEach((originalClass, index) => {
+      classIdMap.set(originalClass.id, duplicatedClasses[index].id);
+    });
+
+    // Duplicate allocations with updated teacher and class IDs
+    const duplicatedAllocations = scenario.allocations.map(allocation => {
+      // Handle both old classId and new classIds format
+      let newClassIds: string[] = [];
+      if (allocation.classIds && allocation.classIds.length > 0) {
+        newClassIds = allocation.classIds.map(classId => classIdMap.get(classId) || classId);
+      } else if (allocation.classId) {
+        const newClassId = classIdMap.get(allocation.classId) || allocation.classId;
+        newClassIds = [newClassId];
+      }
+
+      return {
+        ...allocation,
+        id: `${timestamp}-allocation-${Math.random().toString(36).substr(2, 9)}`,
+        teacherId: teacherIdMap.get(allocation.teacherId) || allocation.teacherId,
+        classId: newClassIds.length > 0 ? newClassIds[0] : '', // Backward compatibility
+        classIds: newClassIds,
+        createdAt: new Date()
+      };
+    });
+
+    // Update hour banks with allocated hours from duplicated allocations
+    duplicatedAllocations.forEach(allocation => {
+      const bankIndex = newHourBanks.findIndex(bank => bank.hourTypeId === allocation.hourTypeId);
+      if (bankIndex >= 0) {
+        newHourBanks[bankIndex].allocatedHours += allocation.hours;
+        newHourBanks[bankIndex].remainingHours -= allocation.hours;
+      }
+    });
+
+    // Update teacher allocated hours
+    duplicatedAllocations.forEach(allocation => {
+      const teacherIndex = duplicatedTeachers.findIndex(teacher => teacher.id === allocation.teacherId);
+      if (teacherIndex >= 0) {
+        duplicatedTeachers[teacherIndex].allocatedHours += allocation.hours;
+      }
+    });
+
     const duplicatedScenario: Scenario = {
       ...scenario,
-      id: Date.now().toString(),
+      id: timestamp.toString(),
       name: `${scenario.name} - עותק`,
       isActive: false,
       createdAt: new Date(),
       updatedAt: new Date(),
-      // Reset allocations for the new scenario
-      allocations: [],
-      // Use updated hour banks based on current hour types
+      allocations: duplicatedAllocations,
       hourBanks: newHourBanks,
-      // Reset teachers and classes to empty (they should be re-added to the new scenario)
-      teachers: [],
-      classes: []
+      teachers: duplicatedTeachers,
+      classes: duplicatedClasses
     };
     
     const updatedScenarios = [...scenarios, duplicatedScenario];
