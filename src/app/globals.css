@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hebrew RTL Support */
+[dir="rtl"] {
+  direction: rtl;
+}
+
+.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Hebrew fonts */
+.font-hebrew {
+  font-family: 'Arial Hebrew', 'David', 'Times New Roman', serif;
+}
+
+/* Custom utilities for RTL */
+.rtl .ml-auto {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.rtl .mr-auto {
+  margin-right: 0;
+  margin-left: auto;
+}
