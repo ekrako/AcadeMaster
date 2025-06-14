@@ -9,7 +9,8 @@ import {
   deleteScenario,
   exportScenario,
   validateScenarioImport,
-  importScenario
+  importScenario,
+  duplicateScenario
 } from '@/lib/database';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -146,6 +147,31 @@ export default function ScenarioManager() {
     } catch (error) {
       console.error('Error exporting scenario:', error);
       alert(`שגיאה בייצוא התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+    }
+  };
+
+  const handleDuplicate = async (scenarioId: string) => {
+    if (!user) {
+      alert('נדרש להתחבר כדי לשכפל תרחיש');
+      return;
+    }
+
+    const scenario = scenarios.find(s => s.id === scenarioId);
+    if (!scenario) {
+      alert('תרחיש לא נמצא');
+      return;
+    }
+
+    if (confirm(`האם אתה רוצה לשכפל את התרחיש "${scenario.name}"? יווצר תרחיש חדש עם כל המורים, הכיתות וההקצאות.`)) {
+      try {
+        const newScenarioId = await duplicateScenario(user.uid, scenarioId);
+        alert('התרחיש שוכפל בהצלחה!');
+        // Refresh the scenarios list
+        await loadData();
+      } catch (error) {
+        console.error('Error duplicating scenario:', error);
+        alert(`שגיאה בשכפול התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+      }
     }
   };
 
@@ -347,7 +373,14 @@ export default function ScenarioManager() {
                     ייצוא
                   </button>
                   <button
-                    onClick={() => window.location.href = `/scenarios/${scenario.id}`}
+                    onClick={() => handleDuplicate(scenario.id)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
+                    title="שכפל תרחיש"
+                  >
+                    שכפול
+                  </button>
+                  <button
+                    onClick={() => window.location.href = `/scenario?id=${scenario.id}`}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
                   >
                     עריכה

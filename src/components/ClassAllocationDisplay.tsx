@@ -29,7 +29,9 @@ export default function ClassAllocationDisplay({ scenario }: ClassAllocationDisp
     const classIds = allocation.classIds || (allocation.classId ? [allocation.classId] : []);
     const otherClassIds = classIds.filter((id: string) => id !== currentClassId);
     
-    if (otherClassIds.length === 0) return '';
+    if (otherClassIds.length === 0) {
+      return '';
+    }
     
     const otherClassNames = otherClassIds
       .map((classId: string) => {

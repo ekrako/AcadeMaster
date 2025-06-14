@@ -590,3 +590,66 @@ export const importScenario = async (
     return await createScenario(userId, newScenario);
   }, 'importScenario');
 };
+
+export const duplicateScenario = async (userId: string, scenarioId: string): Promise<string> => {
+  return withErrorHandling(async () => {
+    checkDatabase();
+    
+    // Get the original scenario
+    const originalScenario = await getScenario(userId, scenarioId);
+    if (!originalScenario) {
+      throw new Error('Scenario not found');
+    }
+    
+    const timestamp = Date.now();
+    
+    // Create mapping for old teacher IDs to new teacher IDs
+    const teacherIdMap = new Map<string, string>();
+    const newTeachers = originalScenario.teachers.map((teacher, index) => {
+      const newTeacherId = `dup-teacher-${timestamp}-${index}`;
+      teacherIdMap.set(teacher.id, newTeacherId);
+      return {
+        ...teacher,
+        id: newTeacherId
+      };
+    });
+    
+    // Create mapping for old class IDs to new class IDs
+    const classIdMap = new Map<string, string>();
+    const newClasses = originalScenario.classes.map((cls, index) => {
+      const newClassId = `dup-class-${timestamp}-${index}`;
+      classIdMap.set(cls.id, newClassId);
+      return {
+        ...cls,
+        id: newClassId
+      };
+    });
+    
+    // Update allocations with new IDs
+    const newAllocations = originalScenario.allocations.map((allocation, index) => ({
+      ...allocation,
+      id: `dup-allocation-${timestamp}-${index}`,
+      teacherId: teacherIdMap.get(allocation.teacherId) || allocation.teacherId,
+      classId: allocation.classId ? (classIdMap.get(allocation.classId) || allocation.classId) : ''
+    }));
+    
+    // Update hour banks with new IDs
+    const newHourBanks = originalScenario.hourBanks.map((bank, index) => ({
+      ...bank,
+      id: `dup-bank-${timestamp}-${index}`
+    }));
+    
+    // Create the new scenario
+    const duplicatedScenario = {
+      name: `${originalScenario.name} - העתק`,
+      description: originalScenario.description ? `${originalScenario.description} (העתק)` : 'העתק של התרחיש המקורי',
+      isActive: false, // Duplicated scenarios start as inactive
+      hourBanks: newHourBanks,
+      teachers: newTeachers,
+      classes: newClasses,
+      allocations: newAllocations
+    };
+    
+    return await createScenario(userId, duplicatedScenario);
+  }, 'duplicateScenario');
+};

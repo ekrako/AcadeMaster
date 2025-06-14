@@ -372,7 +372,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
           <div className="grid gap-4">
             {scenario.teachers.map(teacher => {
               const totalAllocated = getTotalAllocatedToTeacher(teacher.id) || 0;
-              const maxHours = teacher.maxHours || 40;
+              const maxHours = teacher.maxHours || 25;
               const utilizationPercent = maxHours > 0 ? (totalAllocated / maxHours) * 100 : 0;
               const isOverAllocated = totalAllocated > maxHours;
               
@@ -631,7 +631,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                             <input
                               type="number"
                               min="0"
-                              max={Math.min(available || 0, selectedTeacher?.maxHours || 40)}
+                              max={Math.min(available || 0, selectedTeacher?.maxHours || 25)}
                               value={allocation.generalHours || 0}
                               onChange={(e) => handleGeneralHoursChange(hourType.id, parseInt(e.target.value) || 0)}
                               className={`w-24 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -729,7 +729,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                               <input
                                 type="number"
                                 min="0"
-                                max={Math.min(available || 0, selectedTeacher?.maxHours || 40)}
+                                max={Math.min(available || 0, selectedTeacher?.maxHours || 25)}
                                 value={allocation.generalHours || 0}
                                 onChange={(e) => handleGeneralHoursChange(hourType.id, parseInt(e.target.value) || 0)}
                                 className={`w-20 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${

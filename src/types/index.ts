@@ -38,10 +38,11 @@ export interface Teacher {
   name: string;
   email?: string;
   phone?: string;
-  idNumber: string; // ID number (was employeeId)
+  idNumber?: string; // ID number (was employeeId) - optional, auto-generated if not provided
   subject?: string;
   maxHours: number;
   allocatedHours: number;
+  homeroomClassIds?: string[]; // מחנך - homeroom teacher for up to 2 classes
 }
 
 // Teacher's allocated hours by type

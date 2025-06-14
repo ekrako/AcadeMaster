@@ -15,6 +15,17 @@ interface TeacherManagerWorkingProps {
 
 export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, scenario, onScenarioUpdate }: TeacherManagerWorkingProps) {
   const [localTeachers, setLocalTeachers] = useState<Teacher[]>(teachers);
+  
+  // Generate unique 9-digit ID number
+  const generateUniqueIdNumber = (): string => {
+    const existingIds = localTeachers.map(t => t.idNumber).filter(Boolean);
+    let newId: string;
+    do {
+      // Generate random 9-digit number (100000000-999999999)
+      newId = Math.floor(100000000 + Math.random() * 900000000).toString();
+    } while (existingIds.includes(newId));
+    return newId;
+  };
   const [filteredTeachers, setFilteredTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [showAllocationModal, setShowAllocationModal] = useState(false);
@@ -30,7 +41,8 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
     phone: '',
     idNumber: '',
     subject: '',
-    maxHours: 40
+    maxHours: 25,
+    homeroomClassIds: [] as string[]
   });
   
   const formRef = useRef<HTMLDivElement>(null);
@@ -50,7 +62,7 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
       const filtered = localTeachers.filter(teacher =>
         teacher.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (teacher.email && teacher.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        teacher.idNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (teacher.idNumber && teacher.idNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (teacher.subject && teacher.subject.toLowerCase().includes(searchTerm.toLowerCase()))
       );
       setFilteredTeachers(filtered);
@@ -68,9 +80,7 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
       newErrors.name = 'שם המורה לא יכול להכיל יותר מ-100 תווים';
     }
 
-    if (!formData.idNumber.trim()) {
-      newErrors.idNumber = 'מספר תעודת זהות הוא שדה חובה';
-    } else {
+    if (formData.idNumber.trim()) {
       const isDuplicate = localTeachers.some(teacher => 
         teacher.idNumber === formData.idNumber.trim() &&
         teacher.id !== editingTeacher?.id
@@ -116,7 +126,8 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
       idNumber: formData.idNumber.trim(),
       subject: formData.subject.trim(),
       maxHours: formData.maxHours,
-      allocatedHours: 0
+      allocatedHours: 0,
+      homeroomClassIds: formData.homeroomClassIds
     };
 
     let updatedTeachers: Teacher[];
@@ -130,7 +141,8 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
     } else {
       const newTeacher: Teacher = {
         id: Date.now().toString(),
-        ...teacherData
+        ...teacherData,
+        idNumber: teacherData.idNumber || generateUniqueIdNumber(),
       };
       updatedTeachers = [...localTeachers, newTeacher];
     }
@@ -146,9 +158,10 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
       name: teacher.name,
       email: teacher.email || '',
       phone: teacher.phone || '',
-      idNumber: teacher.idNumber,
+      idNumber: teacher.idNumber || '',
       subject: teacher.subject || '',
-      maxHours: teacher.maxHours
+      maxHours: teacher.maxHours,
+      homeroomClassIds: teacher.homeroomClassIds || []
     });
     setShowForm(true);
     
@@ -175,7 +188,8 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
       phone: '',
       idNumber: '',
       subject: '',
-      maxHours: 40
+      maxHours: 25,
+      homeroomClassIds: []
     });
     setEditingTeacher(null);
     setShowForm(false);
@@ -282,7 +296,7 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">מספר תעודת זהות *</label>
+                <label className="block text-sm font-medium mb-2">מספר תעודת זהות</label>
                 <input
                   type="text"
                   value={formData.idNumber}
@@ -290,8 +304,7 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
                   className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.idNumber ? 'border-red-500 bg-red-50' : ''
                   }`}
-                  placeholder="לדוגמה: 123456789"
-                  required
+                  placeholder="לדוגמה: 123456789 (יונפק אוטומטית אם ריק)"
                 />
                 {errors.idNumber && (
                   <p className="text-red-600 text-sm mt-1">{errors.idNumber}</p>
@@ -350,7 +363,7 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
                   min="1"
                   max="60"
                   value={formData.maxHours}
-                  onChange={(e) => setFormData({ ...formData, maxHours: parseInt(e.target.value) || 40 })}
+                  onChange={(e) => setFormData({ ...formData, maxHours: parseInt(e.target.value) || 25 })}
                   className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.maxHours ? 'border-red-500 bg-red-50' : ''
                   }`}
@@ -360,6 +373,54 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
                   <p className="text-red-600 text-sm mt-1">{errors.maxHours}</p>
                 )}
               </div>
+            </div>
+
+            {/* Homeroom Classes Selection */}
+            <div>
+              <label className="block text-sm font-medium mb-2">כיתות חינוך (עד 2)</label>
+              <div className="space-y-2">
+                {scenario?.classes && scenario.classes.length > 0 ? (
+                  scenario.classes.map(classItem => (
+                    <label key={classItem.id} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.homeroomClassIds.includes(classItem.id)}
+                        onChange={(e) => {
+                          const currentIds = formData.homeroomClassIds;
+                          if (e.target.checked) {
+                            // Add class if limit not reached
+                            if (currentIds.length < 2) {
+                              setFormData({ 
+                                ...formData, 
+                                homeroomClassIds: [...currentIds, classItem.id] 
+                              });
+                            }
+                          } else {
+                            // Remove class
+                            setFormData({ 
+                              ...formData, 
+                              homeroomClassIds: currentIds.filter(id => id !== classItem.id) 
+                            });
+                          }
+                        }}
+                        disabled={!formData.homeroomClassIds.includes(classItem.id) && formData.homeroomClassIds.length >= 2}
+                        className="mr-2"
+                      />
+                      <span className={`${
+                        !formData.homeroomClassIds.includes(classItem.id) && formData.homeroomClassIds.length >= 2 
+                          ? 'text-gray-400' : 'text-gray-700'
+                      }`}>
+                        {classItem.name} ({classItem.grade})
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm">אין כיתות זמינות בתרחיש זה</p>
+                )}
+              </div>
+              {formData.homeroomClassIds.length >= 2 && (
+                <p className="text-blue-600 text-sm mt-1">נבחרו המקסימום כיתות (2)</p>
+              )}
             </div>
 
             <div className="flex gap-3 pt-4 border-t">
@@ -413,9 +474,11 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
                 <div className="flex-1">
                   <h4 className="font-semibold text-lg">{teacher.name}</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-sm text-gray-600">
-                    <div>
-                      <span className="text-gray-500">מספר תעודת זהות:</span> {teacher.idNumber}
-                    </div>
+                    {teacher.idNumber && (
+                      <div>
+                        <span className="text-gray-500">מספר תעודת זהות:</span> {teacher.idNumber}
+                      </div>
+                    )}
                     {teacher.subject && (
                       <div>
                         <span className="text-gray-500">מקצוע:</span> {teacher.subject}
@@ -432,6 +495,27 @@ export default function TeacherManagerWorking({ scenarioId, teachers, onUpdate, 
                       </div>
                     )}
                   </div>
+                  
+                  {/* Display Homeroom Classes */}
+                  {teacher.homeroomClassIds && teacher.homeroomClassIds.length > 0 && (
+                    <div className="mt-2">
+                      <span className="text-gray-500 text-sm">מחנך של: </span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {teacher.homeroomClassIds.map(classId => {
+                          const classItem = scenario?.classes?.find(c => c.id === classId);
+                          return classItem ? (
+                            <span 
+                              key={classId}
+                              className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                            >
+                              {classItem.name} ({classItem.grade})
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="mt-2 space-y-2">
                     <div className="flex items-center gap-4 text-sm">
                       <span className="text-gray-500">שעות:</span>
