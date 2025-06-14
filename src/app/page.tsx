@@ -1,6 +1,19 @@
+'use client';
+
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { AuthButton } from '@/components/AuthButton';
 
 export default function Home() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8">
@@ -67,12 +80,21 @@ export default function Home() {
         </div>
 
         <div className="text-center mt-12">
-          <Link
-            href="/scenarios"
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-md transition-colors"
-          >
-            התחל עכשיו
-          </Link>
+          {user ? (
+            <Link
+              href="/scenarios"
+              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg shadow-md transition-colors"
+            >
+              התחל עכשיו
+            </Link>
+          ) : (
+            <div className="space-y-4 flex flex-col items-center">
+              <p className="text-gray-600 mb-4">
+                התחבר כדי להתחיל לעבוד עם המערכת
+              </p>
+              <AuthButton centered />
+            </div>
+          )}
         </div>
       </div>
     </div>

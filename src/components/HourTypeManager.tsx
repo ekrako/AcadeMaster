@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { HourType, CreateHourTypeForm } from '@/types';
 import { getHourTypes, createHourType, updateHourType, deleteHourType } from '@/lib/database';
 import { defaultHourTypes } from '@/lib/defaultData';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function HourTypeManager() {
+  const { user } = useAuth();
   const [hourTypes, setHourTypes] = useState<HourType[]>([]);
   const [filteredHourTypes, setFilteredHourTypes] = useState<HourType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,16 +29,20 @@ export default function HourTypeManager() {
   ];
 
   useEffect(() => {
-    loadHourTypes();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (user) {
+      loadHourTypes();
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     filterHourTypes();
   }, [hourTypes, searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHourTypes = async () => {
+    if (!user) return;
+    
     try {
-      const types = await getHourTypes();
+      const types = await getHourTypes(user.uid);
       setHourTypes(types);
     } catch (error) {
       console.error('Error loading hour types:', error);
@@ -116,9 +122,9 @@ export default function HourTypeManager() {
       };
 
       if (editingType) {
-        await updateHourType(editingType.id, trimmedData);
+        await updateHourType(user!.uid, editingType.id, trimmedData);
       } else {
-        await createHourType(trimmedData);
+        await createHourType(user!.uid, trimmedData);
       }
       await loadHourTypes();
       resetForm();
@@ -143,7 +149,7 @@ export default function HourTypeManager() {
   const handleDelete = async (id: string) => {
     if (confirm('האם אתה בטוח שברצונך למחוק סוג שעות זה?')) {
       try {
-        await deleteHourType(id);
+        await deleteHourType(user!.uid, id);
         await loadHourTypes();
       } catch (error) {
         console.error('Error deleting hour type:', error);
@@ -164,7 +170,7 @@ export default function HourTypeManager() {
 
     try {
       for (const hourType of defaultHourTypes) {
-        await createHourType(hourType);
+        await createHourType(user!.uid, hourType);
       }
       await loadHourTypes();
     } catch (error) {

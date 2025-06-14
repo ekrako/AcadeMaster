@@ -11,11 +11,14 @@ import ClassAllocationDisplay from '@/components/ClassAllocationDisplay';
 import ReportManager from '@/components/ReportManager';
 import { Scenario, Teacher, Class, HourBank } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
-import { exportScenario } from '@/lib/database';
+import { useAuth } from '@/contexts/AuthContext';
+import { getScenario, exportScenario } from '@/lib/database';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function ScenarioDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const { user } = useAuth();
   const { hourTypes } = useHourTypes();
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,55 +26,21 @@ export default function ScenarioDetailPage() {
   const [showEditForm, setShowEditForm] = useState(false);
 
   useEffect(() => {
-    loadScenario();
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (user) {
+      loadScenario();
+    }
+  }, [id, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadScenario = async () => {
+    if (!user) return;
+    
     try {
-      // Simulate loading scenario from storage/API
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Check localStorage for scenarios
-      const stored = localStorage.getItem('academaster-scenarios');
-      if (stored) {
-        const scenarios = JSON.parse(stored);
-        const foundScenario = scenarios.find((s: any) => s.id === id);
-        if (foundScenario) {
-          // Convert dates
-          foundScenario.createdAt = new Date(foundScenario.createdAt);
-          foundScenario.updatedAt = new Date(foundScenario.updatedAt);
-          setScenario(foundScenario);
-        } else {
-          // Create mock scenario
-          const mockScenario: Scenario = {
-            id,
-            name: `תרחיש #${id}`,
-            description: 'תרחיש בדיקה',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            isActive: false,
-            hourBanks: createHourBanksFromTypes(),
-            teachers: [],
-            classes: [],
-            allocations: []
-          };
-          setScenario(mockScenario);
-        }
+      const scenarioData = await getScenario(user.uid, id);
+      if (scenarioData) {
+        setScenario(scenarioData);
       } else {
-        // Create mock scenario
-        const mockScenario: Scenario = {
-          id,
-          name: `תרחיש #${id}`,
-          description: 'תרחיש בדיקה',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isActive: false,
-          hourBanks: createHourBanksFromTypes(),
-          teachers: [],
-          classes: [],
-          allocations: []
-        };
-        setScenario(mockScenario);
+        // Scenario not found
+        setScenario(null);
       }
     } catch (error) {
       console.error('Error loading scenario:', error);
@@ -133,7 +102,7 @@ export default function ScenarioDetailPage() {
     if (!scenario) return;
     
     try {
-      const exportData = await exportScenario(scenario.id);
+      const exportData = await exportScenario(user!.uid, scenario.id);
       const filename = `${scenario.name}-${new Date().toISOString().split('T')[0]}.json`;
       
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -179,7 +148,8 @@ export default function ScenarioDetailPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-6">
+    <ProtectedRoute>
+      <div className="container mx-auto py-8 px-6">
       <div className="mb-6">
         <Link 
           href="/scenarios" 
@@ -458,5 +428,6 @@ export default function ScenarioDetailPage() {
         )}
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

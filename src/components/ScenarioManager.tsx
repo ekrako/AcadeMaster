@@ -11,8 +11,10 @@ import {
   validateScenarioImport,
   importScenario
 } from '@/lib/database';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ScenarioManager() {
+  const { user } = useAuth();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [hourTypes, setHourTypes] = useState<HourType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,14 +30,18 @@ export default function ScenarioManager() {
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   const loadData = async () => {
+    if (!user) return;
+    
     try {
       const [scenariosData, hourTypesData] = await Promise.all([
-        getScenarios(),
-        getHourTypes()
+        getScenarios(user.uid),
+        getHourTypes(user.uid)
       ]);
       setScenarios(scenariosData);
       setHourTypes(hourTypesData);
@@ -75,7 +81,7 @@ export default function ScenarioManager() {
         allocations: []
       };
 
-      await createScenario(newScenario);
+      await createScenario(user!.uid, newScenario);
       await loadData();
       resetForm();
     } catch (error) {
@@ -86,7 +92,7 @@ export default function ScenarioManager() {
   const handleDelete = async (id: string) => {
     if (confirm('האם אתה בטוח שברצונך למחוק תרחיש זה?')) {
       try {
-        await deleteScenario(id);
+        await deleteScenario(user!.uid, id);
         await loadData();
       } catch (error) {
         console.error('Error deleting scenario:', error);
@@ -113,7 +119,7 @@ export default function ScenarioManager() {
 
   const handleExport = async (scenarioId: string) => {
     try {
-      const exportData = await exportScenario(scenarioId);
+      const exportData = await exportScenario(user!.uid, scenarioId);
       const scenario = scenarios.find(s => s.id === scenarioId);
       const filename = `${scenario?.name || 'תרחיש'}-${new Date().toISOString().split('T')[0]}.json`;
       
@@ -154,7 +160,7 @@ export default function ScenarioManager() {
         updatedAt: new Date(hourType.updatedAt)
       }));
       
-      const validation = await validateScenarioImport(data);
+      const validation = await validateScenarioImport(user!.uid, data);
       setImportData(data);
       setImportValidation(validation);
       setShowImportModal(true);
@@ -172,7 +178,7 @@ export default function ScenarioManager() {
     
     setImporting(true);
     try {
-      await importScenario(importData, createMissingHourTypes);
+      await importScenario(user!.uid, importData, createMissingHourTypes);
       await loadData();
       setShowImportModal(false);
       setImportData(null);

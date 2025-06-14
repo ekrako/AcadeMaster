@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navigation from "@/components/Navigation";
 import { HourTypesProvider } from "@/contexts/HourTypesContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata: Metadata = {
   title: "AcadeMaster - מערכת הקצאת שעות למורים",
@@ -16,12 +17,14 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl">
       <body className="font-hebrew rtl bg-gray-50">
-        <HourTypesProvider>
-          <Navigation />
-          <main className="min-h-screen">
-            {children}
-          </main>
-        </HourTypesProvider>
+        <AuthProvider>
+          <HourTypesProvider>
+            <Navigation />
+            <main className="min-h-screen">
+              {children}
+            </main>
+          </HourTypesProvider>
+        </AuthProvider>
       </body>
     </html>
   );

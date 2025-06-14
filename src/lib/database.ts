@@ -33,10 +33,10 @@ const checkDatabase = () => {
   }
 };
 
-// Hour Types (Global)
-export const createHourType = async (hourType: Omit<HourType, 'id' | 'createdAt' | 'updatedAt'>) => {
+// Hour Types (User-scoped)
+export const createHourType = async (userId: string, hourType: Omit<HourType, 'id' | 'createdAt' | 'updatedAt'>) => {
   checkDatabase();
-  const docRef = await addDoc(collection(db, 'hourTypes'), {
+  const docRef = await addDoc(collection(db, 'users', userId, 'hourTypes'), {
     ...hourType,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now()
@@ -44,10 +44,10 @@ export const createHourType = async (hourType: Omit<HourType, 'id' | 'createdAt'
   return docRef.id;
 };
 
-export const getHourTypes = async (): Promise<HourType[]> => {
+export const getHourTypes = async (userId: string): Promise<HourType[]> => {
   checkDatabase();
   const querySnapshot = await getDocs(
-    query(collection(db, 'hourTypes'), orderBy('name'))
+    query(collection(db, 'users', userId, 'hourTypes'), orderBy('name'))
   );
   return querySnapshot.docs.map(doc => ({
     id: doc.id,
@@ -57,23 +57,23 @@ export const getHourTypes = async (): Promise<HourType[]> => {
   })) as HourType[];
 };
 
-export const updateHourType = async (id: string, updates: Partial<HourType>) => {
+export const updateHourType = async (userId: string, id: string, updates: Partial<HourType>) => {
   checkDatabase();
-  await updateDoc(doc(db, 'hourTypes', id), {
+  await updateDoc(doc(db, 'users', userId, 'hourTypes', id), {
     ...updates,
     updatedAt: Timestamp.now()
   });
 };
 
-export const deleteHourType = async (id: string) => {
+export const deleteHourType = async (userId: string, id: string) => {
   checkDatabase();
-  await deleteDoc(doc(db, 'hourTypes', id));
+  await deleteDoc(doc(db, 'users', userId, 'hourTypes', id));
 };
 
-// Scenarios
-export const createScenario = async (scenario: Omit<Scenario, 'id' | 'createdAt' | 'updatedAt'>) => {
+// Scenarios (User-scoped)
+export const createScenario = async (userId: string, scenario: Omit<Scenario, 'id' | 'createdAt' | 'updatedAt'>) => {
   checkDatabase();
-  const docRef = await addDoc(collection(db, 'scenarios'), {
+  const docRef = await addDoc(collection(db, 'users', userId, 'scenarios'), {
     ...scenario,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now()
@@ -81,10 +81,10 @@ export const createScenario = async (scenario: Omit<Scenario, 'id' | 'createdAt'
   return docRef.id;
 };
 
-export const getScenarios = async (): Promise<Scenario[]> => {
+export const getScenarios = async (userId: string): Promise<Scenario[]> => {
   checkDatabase();
   const querySnapshot = await getDocs(
-    query(collection(db, 'scenarios'), orderBy('updatedAt', 'desc'))
+    query(collection(db, 'users', userId, 'scenarios'), orderBy('updatedAt', 'desc'))
   );
   return querySnapshot.docs.map(doc => ({
     id: doc.id,
@@ -94,8 +94,8 @@ export const getScenarios = async (): Promise<Scenario[]> => {
   })) as Scenario[];
 };
 
-export const getScenario = async (id: string): Promise<Scenario | null> => {
-  const docSnap = await getDoc(doc(db, 'scenarios', id));
+export const getScenario = async (userId: string, id: string): Promise<Scenario | null> => {
+  const docSnap = await getDoc(doc(db, 'users', userId, 'scenarios', id));
   if (docSnap.exists()) {
     return {
       id: docSnap.id,
@@ -107,15 +107,15 @@ export const getScenario = async (id: string): Promise<Scenario | null> => {
   return null;
 };
 
-export const updateScenario = async (id: string, updates: Partial<Scenario>) => {
-  await updateDoc(doc(db, 'scenarios', id), {
+export const updateScenario = async (userId: string, id: string, updates: Partial<Scenario>) => {
+  await updateDoc(doc(db, 'users', userId, 'scenarios', id), {
     ...updates,
     updatedAt: Timestamp.now()
   });
 };
 
-export const deleteScenario = async (id: string) => {
-  await deleteDoc(doc(db, 'scenarios', id));
+export const deleteScenario = async (userId: string, id: string) => {
+  await deleteDoc(doc(db, 'users', userId, 'scenarios', id));
 };
 
 // Utility functions for hour bank calculations
@@ -135,11 +135,12 @@ export const calculateClassTotalHours = (classData: Class, allocations: Allocati
 
 // Hour bank management
 export const updateHourBankAllocation = async (
+  userId: string,
   scenarioId: string, 
   hourTypeId: string, 
   hoursToAllocate: number
 ) => {
-  const scenario = await getScenario(scenarioId);
+  const scenario = await getScenario(userId, scenarioId);
   if (!scenario) throw new Error('Scenario not found');
 
   const updatedHourBanks = scenario.hourBanks.map(bank => {
@@ -153,19 +154,20 @@ export const updateHourBankAllocation = async (
     return bank;
   });
 
-  await updateScenario(scenarioId, { hourBanks: updatedHourBanks });
+  await updateScenario(userId, scenarioId, { hourBanks: updatedHourBanks });
 };
 
 // Allocation management
 export const createAllocation = async (
+  userId: string,
   scenarioId: string,
   allocation: Omit<Allocation, 'id' | 'createdAt'>
 ) => {
   // First, update the hour bank
-  await updateHourBankAllocation(scenarioId, allocation.hourTypeId, allocation.hours);
+  await updateHourBankAllocation(userId, scenarioId, allocation.hourTypeId, allocation.hours);
 
   // Then create the allocation record
-  const scenario = await getScenario(scenarioId);
+  const scenario = await getScenario(userId, scenarioId);
   if (!scenario) throw new Error('Scenario not found');
 
   const newAllocation: Allocation = {
@@ -175,35 +177,35 @@ export const createAllocation = async (
   };
 
   const updatedAllocations = [...scenario.allocations, newAllocation];
-  await updateScenario(scenarioId, { allocations: updatedAllocations });
+  await updateScenario(userId, scenarioId, { allocations: updatedAllocations });
 
   return newAllocation.id;
 };
 
-export const removeAllocation = async (scenarioId: string, allocationId: string) => {
-  const scenario = await getScenario(scenarioId);
+export const removeAllocation = async (userId: string, scenarioId: string, allocationId: string) => {
+  const scenario = await getScenario(userId, scenarioId);
   if (!scenario) throw new Error('Scenario not found');
 
   const allocation = scenario.allocations.find(a => a.id === allocationId);
   if (!allocation) throw new Error('Allocation not found');
 
   // Update hour bank (add back the hours)
-  await updateHourBankAllocation(scenarioId, allocation.hourTypeId, -allocation.hours);
+  await updateHourBankAllocation(userId, scenarioId, allocation.hourTypeId, -allocation.hours);
 
   // Remove allocation
   const updatedAllocations = scenario.allocations.filter(a => a.id !== allocationId);
-  await updateScenario(scenarioId, { allocations: updatedAllocations });
+  await updateScenario(userId, scenarioId, { allocations: updatedAllocations });
 };
 
 // Export/Import functionality
-export const exportScenario = async (scenarioId: string): Promise<ScenarioExport> => {
-  const scenario = await getScenario(scenarioId);
+export const exportScenario = async (userId: string, scenarioId: string): Promise<ScenarioExport> => {
+  const scenario = await getScenario(userId, scenarioId);
   if (!scenario) throw new Error('Scenario not found');
   
   // Get hour types that have allocated hours (non-zero total hours)
   const allocatedHourBanks = scenario.hourBanks.filter(bank => bank.totalHours > 0);
   const hourTypeIds = allocatedHourBanks.map(bank => bank.hourTypeId);
-  const allHourTypes = await getHourTypes();
+  const allHourTypes = await getHourTypes(userId);
   const scenarioHourTypes = allHourTypes.filter(ht => hourTypeIds.includes(ht.id));
   
   return {
@@ -217,9 +219,9 @@ export const exportScenario = async (scenarioId: string): Promise<ScenarioExport
   };
 };
 
-export const validateScenarioImport = async (exportData: ScenarioExport): Promise<ImportValidationResult> => {
+export const validateScenarioImport = async (userId: string, exportData: ScenarioExport): Promise<ImportValidationResult> => {
   try {
-    const existingHourTypes = await getHourTypes();
+    const existingHourTypes = await getHourTypes(userId);
     const missingHourTypes: HourType[] = [];
     const existingHourTypesInImport: HourType[] = [];
     const warnings: string[] = [];
@@ -267,15 +269,16 @@ export const validateScenarioImport = async (exportData: ScenarioExport): Promis
 };
 
 export const importScenario = async (
+  userId: string,
   exportData: ScenarioExport, 
   createMissingHourTypes: boolean = false
 ): Promise<string> => {
-  const validation = await validateScenarioImport(exportData);
+  const validation = await validateScenarioImport(userId, exportData);
   
   // Create missing hour types if requested
   if (createMissingHourTypes && validation.missingHourTypes.length > 0) {
     for (const hourType of validation.missingHourTypes) {
-      await createHourType({
+      await createHourType(userId, {
         name: hourType.name,
         description: hourType.description,
         color: hourType.color,
@@ -285,7 +288,7 @@ export const importScenario = async (
   }
   
   // Get current hour types to map IDs
-  const currentHourTypes = await getHourTypes();
+  const currentHourTypes = await getHourTypes(userId);
   const hourTypeIdMap = new Map<string, string>();
   
   // Map old IDs to new IDs
@@ -314,5 +317,5 @@ export const importScenario = async (
     }))
   };
   
-  return await createScenario(newScenario);
+  return await createScenario(userId, newScenario);
 };
