@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "users": {
+      "$userId": {
+        ".read": "$userId === auth.uid",
+        ".write": "$userId === auth.uid",
+        "hourTypes": {
+          ".indexOn": ["name", "createdAt"]
+        },
+        "scenarios": {
+          ".indexOn": ["updatedAt", "createdAt", "isActive"]
+        }
+      }
+    }
+  }
+}

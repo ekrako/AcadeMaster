@@ -1,16 +1,16 @@
 import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
+  ref, 
+  push, 
+  set, 
+  get, 
+  update, 
+  remove, 
   query, 
-  where, 
-  orderBy,
-  Timestamp 
-} from 'firebase/firestore';
+  orderByChild, 
+  orderByKey,
+  equalTo,
+  serverTimestamp 
+} from 'firebase/database';
 import { db } from './firebase';
 import { 
   HourType, 
@@ -33,89 +33,248 @@ const checkDatabase = () => {
   }
 };
 
+// Data sanitization function to remove undefined values
+const sanitizeData = (obj: any): any => {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeData).filter(item => item !== undefined);
+  }
+  
+  if (typeof obj === 'object') {
+    const sanitized: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        sanitized[key] = sanitizeData(value);
+      }
+    }
+    return sanitized;
+  }
+  
+  return obj;
+};
+
+// Enhanced error handling wrapper
+const withErrorHandling = async <T>(operation: () => Promise<T>, operationName: string): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error: any) {
+    console.error(`Database operation '${operationName}' failed:`, error);
+    
+    // Handle specific Firebase Realtime Database errors
+    if (error.code) {
+      switch (error.code) {
+        case 'PERMISSION_DENIED':
+          throw new Error('אין הרשאה לגישה לנתונים. אנא התחבר מחדש.');
+        case 'NETWORK_ERROR':
+          throw new Error('שגיאת רשת. אנא בדוק את החיבור לאינטרנט.');
+        case 'UNAVAILABLE':
+          throw new Error('השירות אינו זמין כרגע. אנא נסה שוב מאוחר יותר.');
+        default:
+          throw new Error(`שגיאה במסד הנתונים: ${error.message}`);
+      }
+    }
+    
+    throw new Error(`שגיאה במסד הנתונים: ${error.message || 'שגיאה לא ידועה'}`);
+  }
+};
+
+
+// Helper function to convert timestamp to Date
+const convertTimestamp = (timestamp: any): Date => {
+  if (timestamp && typeof timestamp === 'number') {
+    return new Date(timestamp);
+  }
+  if (timestamp && timestamp.seconds) {
+    return new Date(timestamp.seconds * 1000);
+  }
+  return new Date();
+};
+
+// User management
+export const createUserDocument = async (userId: string, userData: {
+  email: string;
+  displayName: string;
+  photoURL?: string;
+}) => {
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const sanitizedData = sanitizeData({
+      ...userData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastLoginAt: serverTimestamp()
+    });
+    await set(ref(db, `users/${userId}`), sanitizedData);
+  }, 'createUserDocument');
+};
+
+export const getUserDocument = async (userId: string) => {
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const snapshot = await get(ref(db, `users/${userId}`));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      return {
+        id: userId,
+        ...data,
+        createdAt: convertTimestamp(data.createdAt),
+        updatedAt: convertTimestamp(data.updatedAt),
+        lastLoginAt: convertTimestamp(data.lastLoginAt)
+      };
+    }
+    return null;
+  }, 'getUserDocument');
+};
+
+export const updateUserLastLogin = async (userId: string) => {
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const sanitizedUpdates = sanitizeData({
+      lastLoginAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    await update(ref(db, `users/${userId}`), sanitizedUpdates);
+  }, 'updateUserLastLogin');
+};
+
 // Hour Types (User-scoped)
 export const createHourType = async (userId: string, hourType: Omit<HourType, 'id' | 'createdAt' | 'updatedAt'>) => {
-  checkDatabase();
-  const docRef = await addDoc(collection(db, 'users', userId, 'hourTypes'), {
-    ...hourType,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now()
-  });
-  return docRef.id;
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const hourTypesRef = ref(db, `users/${userId}/hourTypes`);
+    const newHourTypeRef = push(hourTypesRef);
+    
+    // Ensure required fields have default values
+    const sanitizedHourType = sanitizeData({
+      name: hourType.name || '',
+      description: hourType.description || '',
+      color: hourType.color || '#3B82F6',
+      isClassHour: hourType.isClassHour !== undefined ? hourType.isClassHour : false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    await set(newHourTypeRef, sanitizedHourType);
+    return newHourTypeRef.key!;
+  }, 'createHourType');
 };
 
 export const getHourTypes = async (userId: string): Promise<HourType[]> => {
-  checkDatabase();
-  const querySnapshot = await getDocs(
-    query(collection(db, 'users', userId, 'hourTypes'), orderBy('name'))
-  );
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-    createdAt: doc.data().createdAt.toDate(),
-    updatedAt: doc.data().updatedAt.toDate()
-  })) as HourType[];
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const snapshot = await get(ref(db, `users/${userId}/hourTypes`));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      const hourTypes = Object.entries(data).map(([id, hourType]: [string, any]) => ({
+        id,
+        ...hourType,
+        createdAt: convertTimestamp(hourType.createdAt),
+        updatedAt: convertTimestamp(hourType.updatedAt)
+      })) as HourType[];
+      
+      // Sort by name on client side instead of using database ordering
+      return hourTypes.sort((a, b) => a.name.localeCompare(b.name, 'he'));
+    }
+    return [];
+  }, 'getHourTypes');
 };
 
 export const updateHourType = async (userId: string, id: string, updates: Partial<HourType>) => {
-  checkDatabase();
-  await updateDoc(doc(db, 'users', userId, 'hourTypes', id), {
-    ...updates,
-    updatedAt: Timestamp.now()
-  });
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const sanitizedUpdates = sanitizeData({
+      ...updates,
+      updatedAt: serverTimestamp()
+    });
+    await update(ref(db, `users/${userId}/hourTypes/${id}`), sanitizedUpdates);
+  }, 'updateHourType');
 };
 
 export const deleteHourType = async (userId: string, id: string) => {
-  checkDatabase();
-  await deleteDoc(doc(db, 'users', userId, 'hourTypes', id));
+  return withErrorHandling(async () => {
+    checkDatabase();
+    await remove(ref(db, `users/${userId}/hourTypes/${id}`));
+  }, 'deleteHourType');
 };
 
 // Scenarios (User-scoped)
 export const createScenario = async (userId: string, scenario: Omit<Scenario, 'id' | 'createdAt' | 'updatedAt'>) => {
-  checkDatabase();
-  const docRef = await addDoc(collection(db, 'users', userId, 'scenarios'), {
-    ...scenario,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now()
-  });
-  return docRef.id;
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const scenariosRef = ref(db, `users/${userId}/scenarios`);
+    const newScenarioRef = push(scenariosRef);
+    
+    const sanitizedScenario = sanitizeData({
+      ...scenario,
+      teachers: scenario.teachers || [],
+      classes: scenario.classes || [],
+      allocations: scenario.allocations || [],
+      hourBanks: scenario.hourBanks || [],
+      isActive: scenario.isActive !== undefined ? scenario.isActive : false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    await set(newScenarioRef, sanitizedScenario);
+    return newScenarioRef.key!;
+  }, 'createScenario');
 };
 
 export const getScenarios = async (userId: string): Promise<Scenario[]> => {
-  checkDatabase();
-  const querySnapshot = await getDocs(
-    query(collection(db, 'users', userId, 'scenarios'), orderBy('updatedAt', 'desc'))
-  );
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-    createdAt: doc.data().createdAt.toDate(),
-    updatedAt: doc.data().updatedAt.toDate()
-  })) as Scenario[];
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const snapshot = await get(ref(db, `users/${userId}/scenarios`));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      const scenarios = Object.entries(data).map(([id, scenario]: [string, any]) => ({
+        id,
+        ...scenario,
+        createdAt: convertTimestamp(scenario.createdAt),
+        updatedAt: convertTimestamp(scenario.updatedAt)
+      })) as Scenario[];
+      // Sort by updatedAt desc (most recent first) on client side
+      return scenarios.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    }
+    return [];
+  }, 'getScenarios');
 };
 
 export const getScenario = async (userId: string, id: string): Promise<Scenario | null> => {
-  const docSnap = await getDoc(doc(db, 'users', userId, 'scenarios', id));
-  if (docSnap.exists()) {
-    return {
-      id: docSnap.id,
-      ...docSnap.data(),
-      createdAt: docSnap.data().createdAt.toDate(),
-      updatedAt: docSnap.data().updatedAt.toDate()
-    } as Scenario;
-  }
-  return null;
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const snapshot = await get(ref(db, `users/${userId}/scenarios/${id}`));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      return {
+        id,
+        ...data,
+        createdAt: convertTimestamp(data.createdAt),
+        updatedAt: convertTimestamp(data.updatedAt)
+      } as Scenario;
+    }
+    return null;
+  }, 'getScenario');
 };
 
 export const updateScenario = async (userId: string, id: string, updates: Partial<Scenario>) => {
-  await updateDoc(doc(db, 'users', userId, 'scenarios', id), {
-    ...updates,
-    updatedAt: Timestamp.now()
-  });
+  return withErrorHandling(async () => {
+    checkDatabase();
+    const sanitizedUpdates = sanitizeData({
+      ...updates,
+      updatedAt: serverTimestamp()
+    });
+    await update(ref(db, `users/${userId}/scenarios/${id}`), sanitizedUpdates);
+  }, 'updateScenario');
 };
 
 export const deleteScenario = async (userId: string, id: string) => {
-  await deleteDoc(doc(db, 'users', userId, 'scenarios', id));
+  return withErrorHandling(async () => {
+    checkDatabase();
+    await remove(ref(db, `users/${userId}/scenarios/${id}`));
+  }, 'deleteScenario');
 };
 
 // Utility functions for hour bank calculations

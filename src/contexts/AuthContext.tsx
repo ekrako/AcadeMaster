@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthStateChange, handleRedirectResult } from '@/lib/auth';
+import { createUserDocument, getUserDocument, updateUserLastLogin } from '@/lib/database';
 
 interface AuthContextType {
   user: User | null;
@@ -38,7 +39,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
     // Set up auth state listener
-    const unsubscribe = onAuthStateChange((user) => {
+    const unsubscribe = onAuthStateChange(async (user) => {
+      if (user) {
+        try {
+          // Check if user document exists
+          const userDoc = await getUserDocument(user.uid);
+          
+          if (!userDoc) {
+            // Create user document if it doesn't exist
+            await createUserDocument(user.uid, {
+              email: user.email || '',
+              displayName: user.displayName || '',
+              photoURL: user.photoURL || undefined
+            });
+          } else {
+            // Update last login
+            await updateUserLastLogin(user.uid);
+          }
+        } catch (error) {
+          console.error('Error managing user document:', error);
+        }
+      }
+      
       setUser(user);
       setLoading(false);
     });
