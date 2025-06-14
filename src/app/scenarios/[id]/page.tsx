@@ -10,6 +10,7 @@ import AllocationManagerWorking from '@/components/AllocationManagerWorking';
 import ClassAllocationDisplay from '@/components/ClassAllocationDisplay';
 import { Scenario, Teacher, Class, HourBank } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
+import { exportScenario } from '@/lib/database';
 
 export default function ScenarioDetailPage() {
   const params = useParams();
@@ -127,6 +128,28 @@ export default function ScenarioDetailPage() {
     }
   };
 
+  const handleExport = async () => {
+    if (!scenario) return;
+    
+    try {
+      const exportData = await exportScenario(scenario.id);
+      const filename = `${scenario.name}-${new Date().toISOString().split('T')[0]}.json`;
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting scenario:', error);
+      alert('שגיאה בייצוא התרחיש');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -177,12 +200,21 @@ export default function ScenarioDetailPage() {
               <p className="text-gray-600 mt-2">{scenario.description}</p>
             )}
           </div>
-          <button
-            onClick={() => setShowEditForm(true)}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-          >
-            ⚙️ עריכת תרחיש
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleExport}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              title="ייצא תרחיש"
+            >
+              📤 ייצוא
+            </button>
+            <button
+              onClick={() => setShowEditForm(true)}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+            >
+              ⚙️ עריכת תרחיש
+            </button>
+          </div>
         </div>
       </div>
 

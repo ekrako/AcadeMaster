@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Scenario, HourType, CreateScenarioForm, HourBank } from '@/types';
+import { Scenario, HourType, CreateScenarioForm, HourBank, ScenarioExport, ImportValidationResult } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
 
 export default function ScenarioManagerWorking() {
-  const { hourTypes, loading: hourTypesLoading } = useHourTypes();
+  const { hourTypes, loading: hourTypesLoading, createHourType } = useHourTypes();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,6 +17,10 @@ export default function ScenarioManagerWorking() {
     description: '',
   });
   const [hourBankData, setHourBankData] = useState<Record<string, number>>({});
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importValidation, setImportValidation] = useState<ImportValidationResult | null>(null);
+  const [importData, setImportData] = useState<ScenarioExport | null>(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (!hourTypesLoading && hourTypes.length >= 0) {
@@ -332,6 +336,202 @@ export default function ScenarioManagerWorking() {
     }));
   };
 
+  const handleExport = async (scenarioId: string) => {
+    try {
+      const scenario = scenarios.find(s => s.id === scenarioId);
+      if (!scenario) {
+        alert('תרחיש לא נמצא');
+        return;
+      }
+      
+      // Get hour types that have allocated hours (non-zero total hours)
+      const allocatedHourBanks = scenario.hourBanks.filter(bank => bank.totalHours > 0);
+      const hourTypeIds = allocatedHourBanks.map(bank => bank.hourTypeId);
+      const scenarioHourTypes = hourTypes.filter(ht => hourTypeIds.includes(ht.id));
+      
+      const exportData: ScenarioExport = {
+        scenario: {
+          ...scenario,
+          hourBanks: allocatedHourBanks
+        },
+        hourTypes: scenarioHourTypes,
+        exportedAt: new Date(),
+        version: '1.0'
+      };
+      
+      const filename = `${scenario.name}-${new Date().toISOString().split('T')[0]}.json`;
+      
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting scenario:', error);
+      alert('שגיאה בייצוא התרחיש');
+    }
+  };
+
+  const validateScenarioImport = (exportData: ScenarioExport): ImportValidationResult => {
+    const missingHourTypes: HourType[] = [];
+    const existingHourTypesInImport: HourType[] = [];
+    const warnings: string[] = [];
+    
+    // Check which hour types are missing
+    for (const hourType of exportData.hourTypes) {
+      const exists = hourTypes.find(ht => 
+        ht.name === hourType.name || ht.id === hourType.id
+      );
+      
+      if (exists) {
+        existingHourTypesInImport.push(exists);
+        // Check if properties match
+        if (exists.color !== hourType.color || exists.isClassHour !== hourType.isClassHour) {
+          warnings.push(`סוג השעה "${hourType.name}" קיים אך עם הגדרות שונות`);
+        }
+      } else {
+        missingHourTypes.push(hourType);
+      }
+    }
+    
+    // Additional validations
+    if (!exportData.scenario.name) {
+      warnings.push('התרחיש לא כולל שם');
+    }
+    
+    if (exportData.scenario.hourBanks.length === 0) {
+      warnings.push('התרחיש לא כולל בנק שעות');
+    }
+    
+    return {
+      isValid: true, // We'll allow import even with missing hour types
+      missingHourTypes,
+      existingHourTypes: existingHourTypesInImport,
+      warnings
+    };
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data: ScenarioExport = JSON.parse(text);
+      
+      // Convert date strings back to Date objects
+      data.scenario.createdAt = new Date(data.scenario.createdAt);
+      data.scenario.updatedAt = new Date(data.scenario.updatedAt);
+      data.exportedAt = new Date(data.exportedAt);
+      data.scenario.allocations = data.scenario.allocations.map(allocation => ({
+        ...allocation,
+        createdAt: new Date(allocation.createdAt)
+      }));
+      data.hourTypes = data.hourTypes.map(hourType => ({
+        ...hourType,
+        createdAt: new Date(hourType.createdAt),
+        updatedAt: new Date(hourType.updatedAt)
+      }));
+      
+      const validation = validateScenarioImport(data);
+      setImportData(data);
+      setImportValidation(validation);
+      setShowImportModal(true);
+    } catch (error) {
+      console.error('Error reading file:', error);
+      alert('שגיאה בקריאת הקובץ. ודא שזהו קובץ JSON תקין.');
+    }
+    
+    // Reset file input
+    event.target.value = '';
+  };
+
+  const handleImport = async () => {
+    if (!importData) return;
+    
+    setImporting(true);
+    try {
+      // Create missing hour types automatically
+      if (importValidation?.missingHourTypes.length) {
+        for (const hourType of importValidation.missingHourTypes) {
+          await createHourType({
+            name: hourType.name,
+            description: hourType.description,
+            color: hourType.color,
+            isClassHour: hourType.isClassHour
+          });
+        }
+        // Wait a bit for the context to update
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Get current hour types to map IDs (refresh to include newly created ones)
+      const currentHourTypes = [...hourTypes];
+      
+      // Add any newly created hour types to the current list
+      for (const hourType of importData.hourTypes) {
+        const exists = currentHourTypes.find(ht => ht.name === hourType.name);
+        if (!exists) {
+          // This hour type was just created, add it to our working list
+          currentHourTypes.push({
+            ...hourType,
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9) // Generate a new ID
+          });
+        }
+      }
+      
+      const hourTypeIdMap = new Map<string, string>();
+      
+      // Map old IDs to new IDs
+      for (const hourType of importData.hourTypes) {
+        const current = currentHourTypes.find(ht => ht.name === hourType.name);
+        if (current) {
+          hourTypeIdMap.set(hourType.id, current.id);
+        }
+      }
+      
+      // Create the scenario with updated hour type IDs
+      const timestamp = Date.now();
+      const newScenario: Scenario = {
+        ...importData.scenario,
+        id: timestamp.toString(),
+        name: `${importData.scenario.name} (מיובא)`,
+        isActive: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        hourBanks: importData.scenario.hourBanks.map(bank => ({
+          ...bank,
+          id: `${timestamp}-${bank.hourTypeId}`,
+          hourTypeId: hourTypeIdMap.get(bank.hourTypeId) || bank.hourTypeId
+        })),
+        allocations: importData.scenario.allocations.map(allocation => ({
+          ...allocation,
+          id: timestamp.toString() + Math.random().toString(36).substr(2, 9),
+          hourTypeId: hourTypeIdMap.get(allocation.hourTypeId) || allocation.hourTypeId,
+          createdAt: new Date()
+        }))
+      };
+      
+      const updatedScenarios = [...scenarios, newScenario];
+      setScenarios(updatedScenarios);
+      localStorage.setItem('academaster-scenarios', JSON.stringify(updatedScenarios));
+      
+      setShowImportModal(false);
+      setImportData(null);
+      setImportValidation(null);
+      alert('התרחיש יובא בהצלחה!');
+    } catch (error) {
+      console.error('Error importing scenario:', error);
+      alert('שגיאה בייבוא התרחיש');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   if (loading || hourTypesLoading) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -351,13 +551,24 @@ export default function ScenarioManagerWorking() {
             צור ונהל תרחישי הקצאת שעות שונים (גרסת בדיקה)
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg whitespace-nowrap"
-          disabled={hourTypes.length === 0}
-        >
-          צור תרחיש חדש
-        </button>
+        <div className="flex gap-3">
+          <label className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg cursor-pointer whitespace-nowrap">
+            📥 יבא תרחיש
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg whitespace-nowrap"
+            disabled={hourTypes.length === 0}
+          >
+            צור תרחיש חדש
+          </button>
+        </div>
       </div>
 
       {/* Error Message */}
@@ -573,6 +784,13 @@ export default function ScenarioManagerWorking() {
                     ✏️ עריכה
                   </button>
                   <button
+                    onClick={() => handleExport(scenario.id)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded text-sm font-medium"
+                    title="ייצא תרחיש"
+                  >
+                    📤 ייצא
+                  </button>
+                  <button
                     onClick={() => handleDuplicate(scenario)}
                     className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm font-medium"
                     title="שכפל תרחיש"
@@ -643,6 +861,119 @@ export default function ScenarioManagerWorking() {
           ))
         )}
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && importValidation && importData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">יבוא תרחיש</h3>
+            
+            <div className="mb-4">
+              <h4 className="font-semibold text-lg">{importData.scenario.name}</h4>
+              <p className="text-gray-600 text-sm">
+                ייצא ב: {new Date(importData.exportedAt).toLocaleDateString('he-IL')}
+              </p>
+            </div>
+
+            {importValidation.warnings.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <h5 className="font-medium text-yellow-800 mb-2">אזהרות:</h5>
+                <ul className="list-disc list-inside text-yellow-700 text-sm">
+                  {importValidation.warnings.map((warning, index) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {importValidation.missingHourTypes.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h5 className="font-medium text-red-800 mb-2">סוגי שעות חסרים:</h5>
+                <div className="space-y-2">
+                  {importValidation.missingHourTypes.map((hourType) => (
+                    <div key={hourType.id} className="flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: hourType.color }}
+                      />
+                      <span className="text-sm">{hourType.name}</span>
+                      {hourType.description && (
+                        <span className="text-xs text-gray-500">({hourType.description})</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-red-700 text-sm mt-2">
+                  סוגי השעות החסרים ייווצרו אוטומטית בייבוא.
+                </p>
+              </div>
+            )}
+
+            {importValidation.existingHourTypes.length > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <h5 className="font-medium text-green-800 mb-2">סוגי שעות קיימים:</h5>
+                <div className="space-y-1">
+                  {importValidation.existingHourTypes.map((hourType) => (
+                    <div key={hourType.id} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: hourType.color }}
+                      />
+                      <span className="text-sm">{hourType.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <h5 className="font-medium mb-2">תוכן התרחיש:</h5>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-blue-600">
+                    {importData.scenario.teachers.length}
+                  </div>
+                  <div>מורים</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-600">
+                    {importData.scenario.classes.length}
+                  </div>
+                  <div>כיתות</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-purple-600">
+                    {importData.scenario.allocations.length}
+                  </div>
+                  <div>הקצאות</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportData(null);
+                  setImportValidation(null);
+                }}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                disabled={importing}
+              >
+                ביטול
+              </button>
+              
+              <button
+                onClick={() => handleImport()}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                disabled={importing}
+              >
+                {importing ? 'מייבא...' : importValidation.missingHourTypes.length > 0 ? 'יבא תרחיש וצור סוגי שעות' : 'יבא תרחיש'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

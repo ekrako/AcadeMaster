@@ -18,7 +18,9 @@ import {
   Teacher, 
   Class, 
   Allocation, 
-  HourBank 
+  HourBank,
+  ScenarioExport,
+  ImportValidationResult
 } from '@/types';
 
 // Database availability check
@@ -191,4 +193,126 @@ export const removeAllocation = async (scenarioId: string, allocationId: string)
   // Remove allocation
   const updatedAllocations = scenario.allocations.filter(a => a.id !== allocationId);
   await updateScenario(scenarioId, { allocations: updatedAllocations });
+};
+
+// Export/Import functionality
+export const exportScenario = async (scenarioId: string): Promise<ScenarioExport> => {
+  const scenario = await getScenario(scenarioId);
+  if (!scenario) throw new Error('Scenario not found');
+  
+  // Get hour types that have allocated hours (non-zero total hours)
+  const allocatedHourBanks = scenario.hourBanks.filter(bank => bank.totalHours > 0);
+  const hourTypeIds = allocatedHourBanks.map(bank => bank.hourTypeId);
+  const allHourTypes = await getHourTypes();
+  const scenarioHourTypes = allHourTypes.filter(ht => hourTypeIds.includes(ht.id));
+  
+  return {
+    scenario: {
+      ...scenario,
+      hourBanks: allocatedHourBanks
+    },
+    hourTypes: scenarioHourTypes,
+    exportedAt: new Date(),
+    version: '1.0'
+  };
+};
+
+export const validateScenarioImport = async (exportData: ScenarioExport): Promise<ImportValidationResult> => {
+  try {
+    const existingHourTypes = await getHourTypes();
+    const missingHourTypes: HourType[] = [];
+    const existingHourTypesInImport: HourType[] = [];
+    const warnings: string[] = [];
+    
+    // Check which hour types are missing
+    for (const hourType of exportData.hourTypes) {
+      const exists = existingHourTypes.find(ht => 
+        ht.name === hourType.name || ht.id === hourType.id
+      );
+      
+      if (exists) {
+        existingHourTypesInImport.push(exists);
+        // Check if properties match
+        if (exists.color !== hourType.color || exists.isClassHour !== hourType.isClassHour) {
+          warnings.push(`סוג השעה "${hourType.name}" קיים אך עם הגדרות שונות`);
+        }
+      } else {
+        missingHourTypes.push(hourType);
+      }
+    }
+    
+    // Additional validations
+    if (!exportData.scenario.name) {
+      warnings.push('התרחיש לא כולל שם');
+    }
+    
+    if (exportData.scenario.hourBanks.length === 0) {
+      warnings.push('התרחיש לא כולל בנק שעות');
+    }
+    
+    return {
+      isValid: true, // We'll allow import even with missing hour types
+      missingHourTypes,
+      existingHourTypes: existingHourTypesInImport,
+      warnings
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      missingHourTypes: [],
+      existingHourTypes: [],
+      warnings: [`שגיאה בבדיקת הקובץ: ${error}`]
+    };
+  }
+};
+
+export const importScenario = async (
+  exportData: ScenarioExport, 
+  createMissingHourTypes: boolean = false
+): Promise<string> => {
+  const validation = await validateScenarioImport(exportData);
+  
+  // Create missing hour types if requested
+  if (createMissingHourTypes && validation.missingHourTypes.length > 0) {
+    for (const hourType of validation.missingHourTypes) {
+      await createHourType({
+        name: hourType.name,
+        description: hourType.description,
+        color: hourType.color,
+        isClassHour: hourType.isClassHour
+      });
+    }
+  }
+  
+  // Get current hour types to map IDs
+  const currentHourTypes = await getHourTypes();
+  const hourTypeIdMap = new Map<string, string>();
+  
+  // Map old IDs to new IDs
+  for (const hourType of exportData.hourTypes) {
+    const current = currentHourTypes.find(ht => ht.name === hourType.name);
+    if (current) {
+      hourTypeIdMap.set(hourType.id, current.id);
+    }
+  }
+  
+  // Create the scenario with updated hour type IDs
+  const newScenario: Omit<Scenario, 'id' | 'createdAt' | 'updatedAt'> = {
+    ...exportData.scenario,
+    name: `${exportData.scenario.name} (מיובא)`,
+    isActive: false,
+    hourBanks: exportData.scenario.hourBanks.map(bank => ({
+      ...bank,
+      id: `${Date.now()}-${bank.hourTypeId}`,
+      hourTypeId: hourTypeIdMap.get(bank.hourTypeId) || bank.hourTypeId
+    })),
+    allocations: exportData.scenario.allocations.map(allocation => ({
+      ...allocation,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      hourTypeId: hourTypeIdMap.get(allocation.hourTypeId) || allocation.hourTypeId,
+      createdAt: new Date()
+    }))
+  };
+  
+  return await createScenario(newScenario);
 };

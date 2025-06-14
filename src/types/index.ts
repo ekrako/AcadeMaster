@@ -151,3 +151,18 @@ export interface CreateClassForm {
     hours: number;
   }[];
 }
+
+// Export/Import types
+export interface ScenarioExport {
+  scenario: Scenario;
+  hourTypes: HourType[];
+  exportedAt: Date;
+  version: string;
+}
+
+export interface ImportValidationResult {
+  isValid: boolean;
+  missingHourTypes: HourType[];
+  existingHourTypes: HourType[];
+  warnings: string[];
+}
