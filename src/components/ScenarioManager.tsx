@@ -13,9 +13,11 @@ import {
   duplicateScenario
 } from '@/lib/database';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFlash } from '@/contexts/FlashContext';
 
 export default function ScenarioManager() {
   const { user } = useAuth();
+  const { showFlash } = useFlash();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [hourTypes, setHourTypes] = useState<HourType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +94,7 @@ export default function ScenarioManager() {
 
   const handleDelete = async (id: string) => {
     if (!user) {
-      alert('נדרש להתחבר כדי למחוק תרחיש');
+      showFlash('נדרש להתחבר כדי למחוק תרחיש', 'warning');
       return;
     }
 
@@ -100,9 +102,10 @@ export default function ScenarioManager() {
       try {
         await deleteScenario(user.uid, id);
         await loadData();
+        showFlash('התרחיש נמחק בהצלחה', 'success');
       } catch (error) {
         console.error('Error deleting scenario:', error);
-        alert(`שגיאה במחיקת התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+        showFlash(`שגיאה במחיקת התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`, 'error');
       }
     }
   };
@@ -126,7 +129,7 @@ export default function ScenarioManager() {
 
   const handleExport = async (scenarioId: string) => {
     if (!user) {
-      alert('נדרש להתחבר כדי לייצא תרחיש');
+      showFlash('נדרש להתחבר כדי לייצא תרחיש', 'warning');
       return;
     }
 
@@ -146,31 +149,31 @@ export default function ScenarioManager() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting scenario:', error);
-      alert(`שגיאה בייצוא התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+      showFlash(`שגיאה בייצוא התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`, 'error');
     }
   };
 
   const handleDuplicate = async (scenarioId: string) => {
     if (!user) {
-      alert('נדרש להתחבר כדי לשכפל תרחיש');
+      showFlash('נדרש להתחבר כדי לשכפל תרחיש', 'warning');
       return;
     }
 
     const scenario = scenarios.find(s => s.id === scenarioId);
     if (!scenario) {
-      alert('תרחיש לא נמצא');
+      showFlash('תרחיש לא נמצא', 'error');
       return;
     }
 
     if (confirm(`האם אתה רוצה לשכפל את התרחיש "${scenario.name}"? יווצר תרחיש חדש עם כל המורים, הכיתות וההקצאות.`)) {
       try {
         const newScenarioId = await duplicateScenario(user.uid, scenarioId);
-        alert('התרחיש שוכפל בהצלחה!');
+        showFlash('התרחיש שוכפל בהצלחה!', 'success');
         // Refresh the scenarios list
         await loadData();
       } catch (error) {
         console.error('Error duplicating scenario:', error);
-        alert(`שגיאה בשכפול התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
+        showFlash(`שגיאה בשכפול התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`, 'error');
       }
     }
   };
@@ -203,7 +206,7 @@ export default function ScenarioManager() {
       setShowImportModal(true);
     } catch (error) {
       console.error('Error reading file:', error);
-      alert('שגיאה בקריאת הקובץ. ודא שזהו קובץ JSON תקין.');
+      showFlash('שגיאה בקריאת הקובץ. ודא שזהו קובץ JSON תקין.', 'error');
     }
     
     // Reset file input
@@ -220,7 +223,7 @@ export default function ScenarioManager() {
       setShowImportModal(false);
       setImportData(null);
       setImportValidation(null);
-      alert('התרחיש יובא בהצלחה!');
+      showFlash('התרחיש יובא בהצלחה!', 'success');
     } catch (error) {
       console.error('Error importing scenario:', error);
       alert('שגיאה בייבוא התרחיש');

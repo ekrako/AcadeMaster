@@ -3,9 +3,14 @@
 import { useState, useEffect } from 'react';
 import { Scenario, HourType, CreateScenarioForm, HourBank, ScenarioExport, ImportValidationResult } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFlash } from '@/contexts/FlashContext';
+import { getScenarios, createScenario, updateScenario, deleteScenario, duplicateScenario, exportScenario, importScenario } from '@/lib/database';
 
 export default function ScenarioManagerWorking() {
   const { hourTypes, loading: hourTypesLoading, createHourType } = useHourTypes();
+  const { user } = useAuth();
+  const { showFlash } = useFlash();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,35 +28,25 @@ export default function ScenarioManagerWorking() {
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    if (!hourTypesLoading && hourTypes.length >= 0) {
+    if (!hourTypesLoading && hourTypes.length >= 0 && user) {
       loadData();
     }
-  }, [hourTypes, hourTypesLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hourTypes, hourTypesLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = async () => {
+    if (!user) {
+      return;
+    }
+    
     try {
-      // Load scenarios from localStorage
-      console.log('Loading scenarios...');
+      console.log('Loading scenarios from database...');
+      const dbScenarios = await getScenarios(user.uid);
+      setScenarios(dbScenarios);
       
-      setTimeout(() => {
-        const stored = localStorage.getItem('academaster-scenarios');
-        if (stored) {
-          const parsedScenarios = JSON.parse(stored).map((scenario: any) => ({
-            ...scenario,
-            createdAt: new Date(scenario.createdAt),
-            updatedAt: new Date(scenario.updatedAt)
-          }));
-          setScenarios(parsedScenarios);
-        } else {
-          // No scenarios exist yet
-          setScenarios([]);
-        }
-        
-        // Initialize hour bank data with zeros for all current hour types
-        initializeHourBankData(hourTypes);
-        
-        setLoading(false);
-      }, 1000);
+      // Initialize hour bank data with zeros for all current hour types
+      initializeHourBankData(hourTypes);
+      
+      setLoading(false);
     } catch (error) {
       console.error('Error loading data:', error);
       setErrors({ general: 'שגיאה בטעינת הנתונים. אנא נסה שוב.' });
@@ -119,7 +114,7 @@ export default function ScenarioManagerWorking() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || !user) {
       return;
     }
 
@@ -127,50 +122,64 @@ export default function ScenarioManagerWorking() {
     setErrors({});
 
     try {
-      // Simulate save operation
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Create hour banks from current hour types and form data
-      const hourBanks: HourBank[] = hourTypes.map(hourType => ({
-        id: `${Date.now()}-${hourType.id}`,
-        hourTypeId: hourType.id,
-        totalHours: hourBankData[hourType.id] || 0,
-        allocatedHours: 0,
-        remainingHours: hourBankData[hourType.id] || 0
-      }));
-
-      const scenarioData = {
-        name: formData.name.trim(),
-        description: formData.description?.trim() || '',
-        isActive: false,
-        hourBanks,
-        teachers: [],
-        classes: [],
-        allocations: []
-      };
-
       if (editingScenario) {
         // Update existing scenario
+        const updatedHourBanks: HourBank[] = hourTypes.map(hourType => {
+          const existingBank = editingScenario.hourBanks.find(b => b.hourTypeId === hourType.id);
+          const newTotalHours = hourBankData[hourType.id] || 0;
+          const allocatedHours = existingBank?.allocatedHours || 0;
+          
+          return {
+            id: existingBank?.id || `${Date.now()}-${hourType.id}`,
+            hourTypeId: hourType.id,
+            totalHours: newTotalHours,
+            allocatedHours: allocatedHours,
+            remainingHours: newTotalHours - allocatedHours,
+          };
+        });
+
+        const scenarioUpdateData = {
+          name: formData.name.trim(),
+          description: formData.description?.trim() || '',
+          hourBanks: updatedHourBanks,
+        };
+
+        await updateScenario(user.uid, editingScenario.id, scenarioUpdateData);
+        
         const updatedScenarios = scenarios.map(s => 
           s.id === editingScenario.id 
-            ? { ...s, ...scenarioData, updatedAt: new Date() }
+            ? { ...s, ...scenarioUpdateData, updatedAt: new Date() }
             : s
         );
         setScenarios(updatedScenarios);
-        // Save to localStorage
-        localStorage.setItem('academaster-scenarios', JSON.stringify(updatedScenarios));
       } else {
         // Create new scenario
+        const newHourBanks: HourBank[] = hourTypes.map(hourType => ({
+          id: `${Date.now()}-${hourType.id}`,
+          hourTypeId: hourType.id,
+          totalHours: hourBankData[hourType.id] || 0,
+          allocatedHours: 0,
+          remainingHours: hourBankData[hourType.id] || 0
+        }));
+
+        const newScenarioData = {
+          name: formData.name.trim(),
+          description: formData.description?.trim() || '',
+          isActive: false,
+          hourBanks: newHourBanks,
+          teachers: [],
+          classes: [],
+          allocations: []
+        };
+
+        const newScenarioId = await createScenario(user.uid, newScenarioData);
         const newScenario: Scenario = {
-          id: Date.now().toString(),
-          ...scenarioData,
+          id: newScenarioId,
+          ...newScenarioData,
           createdAt: new Date(),
           updatedAt: new Date()
         };
-        const updatedScenarios = [...scenarios, newScenario];
-        setScenarios(updatedScenarios);
-        // Save to localStorage
-        localStorage.setItem('academaster-scenarios', JSON.stringify(updatedScenarios));
+        setScenarios([...scenarios, newScenario]);
       }
 
       resetForm();
@@ -210,12 +219,11 @@ export default function ScenarioManagerWorking() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('האם אתה בטוח שברצונך למחוק תרחיש זה?')) {
+    if (confirm('האם אתה בטוח שברצונך למחוק תרחיש זה?') && user) {
       try {
+        await deleteScenario(user.uid, id);
         const updatedScenarios = scenarios.filter(s => s.id !== id);
         setScenarios(updatedScenarios);
-        // Save to localStorage
-        localStorage.setItem('academaster-scenarios', JSON.stringify(updatedScenarios));
       } catch (error) {
         console.error('Error deleting scenario:', error);
         setErrors({ general: 'שגיאה במחיקת התרחיש. אנא נסה שוב.' });
@@ -224,100 +232,19 @@ export default function ScenarioManagerWorking() {
   };
 
   const handleDuplicate = async (scenario: Scenario) => {
-    const timestamp = Date.now();
+    if (!user) {
+      return;
+    }
     
-    // Create hour banks based on current hour types, preserving quantities from original
-    const newHourBanks: HourBank[] = hourTypes.map(hourType => {
-      const originalBank = scenario.hourBanks.find(bank => bank.hourTypeId === hourType.id);
-      return {
-        id: `${timestamp}-bank-${hourType.id}`,
-        hourTypeId: hourType.id,
-        totalHours: originalBank?.totalHours || 0,
-        allocatedHours: 0,
-        remainingHours: originalBank?.totalHours || 0
-      };
-    });
-
-    // Duplicate teachers with new IDs but preserve allocated hours structure
-    const duplicatedTeachers = scenario.teachers.map(teacher => ({
-      ...teacher,
-      id: `${timestamp}-teacher-${Math.random().toString(36).substr(2, 9)}`,
-      allocatedHours: 0 // Reset allocated hours since allocations will be reset
-    }));
-
-    // Duplicate classes with new IDs
-    const duplicatedClasses = scenario.classes.map(cls => ({
-      ...cls,
-      id: `${timestamp}-class-${Math.random().toString(36).substr(2, 9)}`
-    }));
-
-    // Create teacher ID mapping for allocations
-    const teacherIdMap = new Map<string, string>();
-    scenario.teachers.forEach((originalTeacher, index) => {
-      teacherIdMap.set(originalTeacher.id, duplicatedTeachers[index].id);
-    });
-
-    // Create class ID mapping for allocations
-    const classIdMap = new Map<string, string>();
-    scenario.classes.forEach((originalClass, index) => {
-      classIdMap.set(originalClass.id, duplicatedClasses[index].id);
-    });
-
-    // Duplicate allocations with updated teacher and class IDs
-    const duplicatedAllocations = scenario.allocations.map(allocation => {
-      // Handle both old classId and new classIds format
-      let newClassIds: string[] = [];
-      if (allocation.classIds && allocation.classIds.length > 0) {
-        newClassIds = allocation.classIds.map(classId => classIdMap.get(classId) || classId);
-      } else if (allocation.classId) {
-        const newClassId = classIdMap.get(allocation.classId) || allocation.classId;
-        newClassIds = [newClassId];
-      }
-
-      return {
-        ...allocation,
-        id: `${timestamp}-allocation-${Math.random().toString(36).substr(2, 9)}`,
-        teacherId: teacherIdMap.get(allocation.teacherId) || allocation.teacherId,
-        classId: newClassIds.length > 0 ? newClassIds[0] : '', // Backward compatibility
-        classIds: newClassIds,
-        createdAt: new Date()
-      };
-    });
-
-    // Update hour banks with allocated hours from duplicated allocations
-    duplicatedAllocations.forEach(allocation => {
-      const bankIndex = newHourBanks.findIndex(bank => bank.hourTypeId === allocation.hourTypeId);
-      if (bankIndex >= 0) {
-        newHourBanks[bankIndex].allocatedHours += allocation.hours;
-        newHourBanks[bankIndex].remainingHours -= allocation.hours;
-      }
-    });
-
-    // Update teacher allocated hours
-    duplicatedAllocations.forEach(allocation => {
-      const teacherIndex = duplicatedTeachers.findIndex(teacher => teacher.id === allocation.teacherId);
-      if (teacherIndex >= 0) {
-        duplicatedTeachers[teacherIndex].allocatedHours += allocation.hours;
-      }
-    });
-
-    const duplicatedScenario: Scenario = {
-      ...scenario,
-      id: timestamp.toString(),
-      name: `${scenario.name} - עותק`,
-      isActive: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      allocations: duplicatedAllocations,
-      hourBanks: newHourBanks,
-      teachers: duplicatedTeachers,
-      classes: duplicatedClasses
-    };
-    
-    const updatedScenarios = [...scenarios, duplicatedScenario];
-    setScenarios(updatedScenarios);
-    // Save to localStorage
-    localStorage.setItem('academaster-scenarios', JSON.stringify(updatedScenarios));
+    try {
+      const newScenarioId = await duplicateScenario(user.uid, scenario.id);
+      // Reload scenarios to get the duplicated one
+      await loadData();
+      showFlash('התרחיש שוכפל בהצלחה!', 'success');
+    } catch (error) {
+      console.error('Error duplicating scenario:', error);
+      showFlash('שגיאה בשכפול התרחיש', 'error');
+    }
   };
 
   const resetForm = () => {
@@ -337,29 +264,14 @@ export default function ScenarioManagerWorking() {
   };
 
   const handleExport = async (scenarioId: string) => {
+    if (!user) {
+      return;
+    }
+    
     try {
+      const exportData = await exportScenario(user.uid, scenarioId);
       const scenario = scenarios.find(s => s.id === scenarioId);
-      if (!scenario) {
-        alert('תרחיש לא נמצא');
-        return;
-      }
-      
-      // Get hour types that have allocated hours (non-zero total hours)
-      const allocatedHourBanks = scenario.hourBanks.filter(bank => bank.totalHours > 0);
-      const hourTypeIds = allocatedHourBanks.map(bank => bank.hourTypeId);
-      const scenarioHourTypes = hourTypes.filter(ht => hourTypeIds.includes(ht.id));
-      
-      const exportData: ScenarioExport = {
-        scenario: {
-          ...scenario,
-          hourBanks: allocatedHourBanks
-        },
-        hourTypes: scenarioHourTypes,
-        exportedAt: new Date(),
-        version: '1.0'
-      };
-      
-      const filename = `${scenario.name}-${new Date().toISOString().split('T')[0]}.json`;
+      const filename = `${scenario?.name || 'scenario'}-${new Date().toISOString().split('T')[0]}.json`;
       
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -372,52 +284,39 @@ export default function ScenarioManagerWorking() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting scenario:', error);
-      alert('שגיאה בייצוא התרחיש');
+      showFlash('שגיאה בייצוא התרחיש', 'error');
     }
   };
 
-  const validateScenarioImport = (exportData: ScenarioExport): ImportValidationResult => {
-    const missingHourTypes: HourType[] = [];
-    const existingHourTypesInImport: HourType[] = [];
-    const warnings: string[] = [];
-    
-    // Check which hour types are missing
-    for (const hourType of exportData.hourTypes) {
-      const exists = hourTypes.find(ht => 
-        ht.name === hourType.name || ht.id === hourType.id
-      );
-      
-      if (exists) {
-        existingHourTypesInImport.push(exists);
-        // Check if properties match
-        if (exists.color !== hourType.color || exists.isClassHour !== hourType.isClassHour) {
-          warnings.push(`סוג השעה "${hourType.name}" קיים אך עם הגדרות שונות`);
-        }
-      } else {
-        missingHourTypes.push(hourType);
-      }
+  const validateScenarioImport = async (exportData: ScenarioExport): Promise<ImportValidationResult> => {
+    if (!user) {
+      return {
+        isValid: false,
+        missingHourTypes: [],
+        existingHourTypes: [],
+        warnings: ['משתמש לא מחובר']
+      };
     }
     
-    // Additional validations
-    if (!exportData.scenario.name) {
-      warnings.push('התרחיש לא כולל שם');
+    try {
+      // Use the database validation function
+      const { validateScenarioImport } = await import('@/lib/database');
+      return await validateScenarioImport(user.uid, exportData);
+    } catch (error) {
+      return {
+        isValid: false,
+        missingHourTypes: [],
+        existingHourTypes: [],
+        warnings: [`שגיאה בבדיקת הקובץ: ${error}`]
+      };
     }
-    
-    if (exportData.scenario.hourBanks.length === 0) {
-      warnings.push('התרחיש לא כולל בנק שעות');
-    }
-    
-    return {
-      isValid: true, // We'll allow import even with missing hour types
-      missingHourTypes,
-      existingHourTypes: existingHourTypesInImport,
-      warnings
-    };
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     try {
       const text = await file.text();
@@ -437,13 +336,13 @@ export default function ScenarioManagerWorking() {
         updatedAt: new Date(hourType.updatedAt)
       }));
       
-      const validation = validateScenarioImport(data);
+      const validation = await validateScenarioImport(data);
       setImportData(data);
       setImportValidation(validation);
       setShowImportModal(true);
     } catch (error) {
       console.error('Error reading file:', error);
-      alert('שגיאה בקריאת הקובץ. ודא שזהו קובץ JSON תקין.');
+      showFlash('שגיאה בקריאת הקובץ. ודא שזהו קובץ JSON תקין.', 'error');
     }
     
     // Reset file input
@@ -451,82 +350,24 @@ export default function ScenarioManagerWorking() {
   };
 
   const handleImport = async () => {
-    if (!importData) return;
+    if (!importData || !user) {
+      return;
+    }
     
     setImporting(true);
     try {
-      // Create missing hour types automatically
-      if (importValidation?.missingHourTypes.length) {
-        for (const hourType of importValidation.missingHourTypes) {
-          await createHourType({
-            name: hourType.name,
-            description: hourType.description,
-            color: hourType.color,
-            isClassHour: hourType.isClassHour
-          });
-        }
-        // Wait a bit for the context to update
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      await importScenario(user.uid, importData, true);
       
-      // Get current hour types to map IDs (refresh to include newly created ones)
-      const currentHourTypes = [...hourTypes];
-      
-      // Add any newly created hour types to the current list
-      for (const hourType of importData.hourTypes) {
-        const exists = currentHourTypes.find(ht => ht.name === hourType.name);
-        if (!exists) {
-          // This hour type was just created, add it to our working list
-          currentHourTypes.push({
-            ...hourType,
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9) // Generate a new ID
-          });
-        }
-      }
-      
-      const hourTypeIdMap = new Map<string, string>();
-      
-      // Map old IDs to new IDs
-      for (const hourType of importData.hourTypes) {
-        const current = currentHourTypes.find(ht => ht.name === hourType.name);
-        if (current) {
-          hourTypeIdMap.set(hourType.id, current.id);
-        }
-      }
-      
-      // Create the scenario with updated hour type IDs
-      const timestamp = Date.now();
-      const newScenario: Scenario = {
-        ...importData.scenario,
-        id: timestamp.toString(),
-        name: `${importData.scenario.name} (מיובא)`,
-        isActive: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        hourBanks: importData.scenario.hourBanks.map(bank => ({
-          ...bank,
-          id: `${timestamp}-${bank.hourTypeId}`,
-          hourTypeId: hourTypeIdMap.get(bank.hourTypeId) || bank.hourTypeId
-        })),
-        allocations: importData.scenario.allocations.map(allocation => ({
-          ...allocation,
-          id: timestamp.toString() + Math.random().toString(36).substr(2, 9),
-          hourTypeId: hourTypeIdMap.get(allocation.hourTypeId) || allocation.hourTypeId,
-          createdAt: new Date()
-        }))
-      };
-      
-      const updatedScenarios = [...scenarios, newScenario];
-      setScenarios(updatedScenarios);
-      localStorage.setItem('academaster-scenarios', JSON.stringify(updatedScenarios));
+      // Reload scenarios to get the imported one
+      await loadData();
       
       setShowImportModal(false);
       setImportData(null);
       setImportValidation(null);
-      alert('התרחיש יובא בהצלחה!');
+      showFlash('התרחיש יובא בהצלחה!', 'success');
     } catch (error) {
       console.error('Error importing scenario:', error);
-      alert('שגיאה בייבוא התרחיש');
+      showFlash('שגיאה בייבוא התרחיש', 'error');
     } finally {
       setImporting(false);
     }
@@ -813,7 +654,9 @@ export default function ScenarioManagerWorking() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {scenario.hourBanks.map(bank => {
                     const hourType = hourTypes.find(ht => ht.id === bank.hourTypeId);
-                    if (!hourType) return null;
+                    if (!hourType) {
+                      return null;
+                    }
                     
                     const utilizationPercent = bank.totalHours > 0 ? (bank.allocatedHours / bank.totalHours) * 100 : 0;
                     
