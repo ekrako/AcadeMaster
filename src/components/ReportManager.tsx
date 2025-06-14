@@ -20,7 +20,7 @@ export default function ReportManager({ scenario, hourTypes }: ReportManagerProp
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [detailedReportData, setDetailedReportData] = useState<DetailedReportData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
 
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function ReportManager({ scenario, hourTypes }: ReportManagerProp
   }
 
   const summary = getScenarioSummary(reportData);
-  const { hourTypes: relevantHourTypes, teachers, matrix, hourTypeTotals, teacherTotals, grandTotal } = reportData;
+  const { hourTypes: relevantHourTypes, teachers, matrix, hourTypeTotals, teacherTotals, grandTotal, hourBankTotals, hourBankUtilization } = reportData;
 
   return (
     <div className="space-y-6">
@@ -194,6 +194,9 @@ export default function ReportManager({ scenario, hourTypes }: ReportManagerProp
                   <th className="border border-gray-300 px-3 py-2 text-center font-semibold bg-blue-50">
                     סה"כ
                   </th>
+                  <th className="border border-gray-300 px-3 py-2 text-center font-semibold bg-green-50">
+                    ניצול בנק
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -216,6 +219,12 @@ export default function ReportManager({ scenario, hourTypes }: ReportManagerProp
                     <td className="border border-gray-300 px-3 py-2 text-center font-semibold bg-blue-50">
                       {hourTypeTotals[hourTypeIndex]}
                     </td>
+                    <td className={`border border-gray-300 px-3 py-2 text-center font-semibold ${
+                      hourBankUtilization[hourTypeIndex] > 100 ? 'text-red-600 bg-red-50' :
+                      hourBankUtilization[hourTypeIndex] < 80 ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50'
+                    }`}>
+                      {hourBankUtilization[hourTypeIndex]}%
+                    </td>
                   </tr>
                 ))}
                 <tr className="bg-blue-50 font-semibold">
@@ -229,6 +238,13 @@ export default function ReportManager({ scenario, hourTypes }: ReportManagerProp
                   ))}
                   <td className="border border-gray-300 px-3 py-2 text-center bg-blue-100">
                     {grandTotal}
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 text-center bg-gray-100 font-semibold">
+                    {(() => {
+                      const totalBankHours = hourBankTotals.reduce((sum, hours) => sum + hours, 0);
+                      const overallUtilization = totalBankHours > 0 ? Math.round((grandTotal / totalBankHours) * 100) : 0;
+                      return `${overallUtilization}%`;
+                    })()}
                   </td>
                 </tr>
                 <tr className="bg-yellow-50 text-sm">
@@ -246,16 +262,22 @@ export default function ReportManager({ scenario, hourTypes }: ReportManagerProp
                       <td 
                         key={teacher.id} 
                         className={`border border-gray-300 px-3 py-2 text-center ${
-                          isOverAllocated ? 'text-red-600 font-semibold' :
-                          isUnderUtilized ? 'text-orange-600' : 'text-green-600'
+                          isOverAllocated ? 'text-red-600 bg-red-50 font-semibold' :
+                          isUnderUtilized ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50'
                         }`}
                       >
                         {utilization}%
                       </td>
                     );
                   })}
-                  <td className="border border-gray-300 px-3 py-2 text-center">
+                  <td className={`border border-gray-300 px-3 py-2 text-center ${
+                    summary.averageUtilization > 100 ? 'text-red-600 bg-red-50 font-semibold' :
+                    summary.averageUtilization < 80 ? 'text-orange-600 bg-orange-50' : 'text-green-600 bg-green-50'
+                  }`}>
                     {summary.averageUtilization}%
+                  </td>
+                  <td className="border border-gray-300 px-3 py-2 text-center bg-green-50">
+                    -
                   </td>
                 </tr>
               </tbody>

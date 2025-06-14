@@ -15,15 +15,22 @@ const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
 
+const checkAuth = () => {
+  if (!auth) {
+    throw new Error('Firebase Authentication not initialized. Please configure Firebase.');
+  }
+};
+
 export const signInWithGoogle = async (useRedirect = false) => {
   try {
+    checkAuth();
     if (useRedirect) {
       // Use redirect method as fallback
-      await signInWithRedirect(auth, googleProvider);
+      await signInWithRedirect(auth!, googleProvider);
       return null; // User will be available after redirect
     } else {
       // Use popup method (default)
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth!, googleProvider);
       return result.user;
     }
   } catch (error) {
@@ -35,7 +42,8 @@ export const signInWithGoogle = async (useRedirect = false) => {
 
 export const handleRedirectResult = async () => {
   try {
-    const result = await getRedirectResult(auth);
+    checkAuth();
+    const result = await getRedirectResult(auth!);
     return result?.user || null;
   } catch (error) {
     const authError = error as AuthError;
@@ -46,7 +54,8 @@ export const handleRedirectResult = async () => {
 
 export const signOut = async (onSignOutComplete?: () => void) => {
   try {
-    await firebaseSignOut(auth);
+    checkAuth();
+    await firebaseSignOut(auth!);
     if (onSignOutComplete) {
       onSignOutComplete();
     }
@@ -57,5 +66,10 @@ export const signOut = async (onSignOutComplete?: () => void) => {
 };
 
 export const onAuthStateChange = (callback: (user: User | null) => void) => {
+  if (!auth) {
+    console.warn('Firebase Authentication not initialized');
+    callback(null);
+    return () => {}; // Return empty unsubscribe function
+  }
   return onAuthStateChanged(auth, callback);
 };

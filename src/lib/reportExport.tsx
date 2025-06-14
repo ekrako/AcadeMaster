@@ -14,7 +14,7 @@ export function exportToExcel(
   reportData: ReportData,
   options: ExcelReportOptions
 ): void {
-  const { hourTypes, teachers, matrix, hourTypeTotals, teacherTotals, grandTotal } = reportData;
+  const { hourTypes, teachers, matrix, hourTypeTotals, teacherTotals, grandTotal, hourBankTotals, hourBankUtilization } = reportData;
   const { scenarioName, includeUtilization = true, fileName } = options;
 
   // Create workbook
@@ -24,7 +24,7 @@ export function exportToExcel(
   const sheetData: any[][] = [];
   
   // Header row with teacher names
-  const headerRow = ['סוג שעה', ...teachers.map(t => t.name), 'סה"כ'];
+  const headerRow = ['סוג שעה', ...teachers.map(t => t.name), 'סה"כ', 'אחוז'];
   sheetData.push(headerRow);
   
   // Data rows - each hour type with teacher allocations
@@ -32,17 +32,23 @@ export function exportToExcel(
     const row = [
       hourType.name,
       ...matrix[hourTypeIndex],
-      hourTypeTotals[hourTypeIndex]
+      hourTypeTotals[hourTypeIndex],
+      `${hourBankUtilization[hourTypeIndex]}%`
     ];
     sheetData.push(row);
   });
   
   // Totals row
-  const totalsRow = ['סה"כ', ...teacherTotals, grandTotal];
+  const totalBankHours = hourBankTotals.reduce((sum, hours) => sum + hours, 0);
+  const overallUtilization = totalBankHours > 0 ? Math.round((grandTotal / totalBankHours) * 100) : 0;
+  const totalsRow = ['סה"כ', ...teacherTotals, grandTotal, `${overallUtilization}%`];
   sheetData.push(totalsRow);
   
   // Add utilization row if requested
   if (includeUtilization) {
+    const totalMaxHours = teachers.reduce((sum, teacher) => sum + teacher.maxHours, 0);
+    const averageUtilization = totalMaxHours > 0 ? Math.round((grandTotal / totalMaxHours) * 100) : 0;
+    
     const utilizationRow = [
       'אחוז ניצול',
       ...teachers.map((teacher, index) => {
@@ -50,7 +56,8 @@ export function exportToExcel(
         const percentage = Math.round((teacherTotals[index] / teacher.maxHours) * 100);
         return `${percentage}%`;
       }),
-      ''
+      `${averageUtilization}%`,
+      '-'
     ];
     sheetData.push(utilizationRow);
   }
@@ -62,7 +69,8 @@ export function exportToExcel(
   const colWidths = [
     { wch: 20 }, // Hour type column
     ...teachers.map(() => ({ wch: 15 })), // Teacher columns
-    { wch: 12 } // Total column
+    { wch: 12 }, // Total column
+    { wch: 10 }  // Percentage column
   ];
   ws['!cols'] = colWidths;
   

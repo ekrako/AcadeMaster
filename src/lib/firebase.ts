@@ -1,29 +1,57 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, connectDatabaseEmulator } from 'firebase/database';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getDatabase, Database } from 'firebase/database';
+import { getAuth, Auth } from 'firebase/auth';
 
+// Firebase configuration with environment variables
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyAlDryAVcnj6x4vwexXaX8m1CRro5fBmUU",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "academaster-1.firebaseapp.com",
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://academaster-1-default-rtdb.us-central1.firebasedatabase.app/",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "academaster-1",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "academaster-1.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "498616340571",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:498616340571:web:5a2bc5acc6a3a838f4ef7e",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase only if it hasn't been initialized already
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Validate that we have all required configuration
+function validateFirebaseConfig() {
+  const requiredFields = [
+    'apiKey',
+    'authDomain', 
+    'databaseURL',
+    'projectId',
+    'storageBucket',
+    'messagingSenderId',
+    'appId'
+  ];
 
-// Initialize Realtime Database
-let database: any = null;
-
-try {
-  database = getDatabase(app);
-} catch (error) {
-  console.error('Failed to initialize Firebase Realtime Database:', error);
+  for (const field of requiredFields) {
+    const value = firebaseConfig[field as keyof typeof firebaseConfig];
+    if (!value) {
+      console.error(`Missing Firebase configuration: ${field}`);
+      return false;
+    }
+  }
+  return true;
 }
 
-export const db = database;
+// Initialize Firebase
+let app: FirebaseApp | null = null;
+let db: Database | null = null; 
+let auth: Auth | null = null;
 
-export const auth = getAuth(app);
+try {
+  if (validateFirebaseConfig()) {
+    // Initialize Firebase only if it hasn't been initialized already
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    
+    // Initialize services
+    db = getDatabase(app);
+    auth = getAuth(app);
+  }
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+}
+
+// Export Firebase services
+export { db, auth };

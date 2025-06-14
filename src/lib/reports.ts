@@ -7,6 +7,8 @@ export interface ReportData {
   hourTypeTotals: number[];
   teacherTotals: number[];
   grandTotal: number;
+  hourBankTotals: number[]; // Total hours available for each hour type
+  hourBankUtilization: number[]; // Percentage utilization for each hour type
 }
 
 export interface ClassAllocationDetail {
@@ -83,13 +85,27 @@ export function generateReportData(
   
   const grandTotal = hourTypeTotals.reduce((sum, total) => sum + total, 0);
   
+  // Calculate hour bank information
+  const hourBankTotals = relevantHourTypes.map(hourType => {
+    const hourBank = scenario.hourBanks.find(bank => bank.hourTypeId === hourType.id);
+    return hourBank ? hourBank.totalHours : 0;
+  });
+  
+  const hourBankUtilization = relevantHourTypes.map((hourType, index) => {
+    const totalHours = hourBankTotals[index];
+    const allocatedHours = hourTypeTotals[index];
+    return totalHours > 0 ? Math.round((allocatedHours / totalHours) * 100) : 0;
+  });
+  
   return {
     hourTypes: relevantHourTypes,
     teachers,
     matrix,
     hourTypeTotals,
     teacherTotals,
-    grandTotal
+    grandTotal,
+    hourBankTotals,
+    hourBankUtilization
   };
 }
 

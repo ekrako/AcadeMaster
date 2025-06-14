@@ -100,27 +100,32 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
     }, 0);
   };
 
-  const validateAllocation = (hourTypeId: string, hours: number, isClassHour = false): string | null => {
+  const validateAllocation = (hourTypeId: string, hours: number, isClassHour = false, classId?: string): string | null => {
     if (hours < 0) return 'מספר השעות לא יכול להיות שלילי';
     if (hours > 40) return 'לא ניתן להקצות יותר מ-40 שעות לכיתה אחת';
     
     if (!selectedTeacher) return null;
     
-    // Check if class hour type requires class assignment when general hours > 0
+    // Get hour type and allocation info for calculations
     const hourType = hourTypes.find(ht => ht.id === hourTypeId);
     const allocation = allocations[hourTypeId];
-    const hasClassAllocations = allocation && Object.keys(allocation.classAllocations).length > 0;
-    
-    if (hourType?.isClassHour && !isClassHour && hours > 0 && !hasClassAllocations) {
-      return 'סוג שעות זה דורש הקצאה לכיתות ספציפיות';
-    }
     
     // Calculate total hours for this hour type including this change
     const currentHoursForType = getTotalHoursForHourType(hourTypeId);
     const currentGeneralHours = allocation?.generalHours || 0;
-    const newGeneralHours = isClassHour ? currentGeneralHours : hours;
-    const classHours = isClassHour ? Object.values(allocation?.classAllocations || {}).reduce((sum, h) => sum + h, 0) : 0;
-    const totalForTypeWithChange = newGeneralHours + classHours;
+    const currentClassHours = Object.values(allocation?.classAllocations || {}).reduce((sum, h) => sum + h, 0);
+    
+    let totalForTypeWithChange;
+    if (isClassHour && classId) {
+      // For class hour changes, keep general hours and adjust only the specific class
+      const currentClassHours = allocation?.classAllocations[classId] || 0;
+      const newClassTotal = Object.entries(allocation?.classAllocations || {})
+        .reduce((sum, [cId, h]) => sum + (cId === classId ? hours : h), 0);
+      totalForTypeWithChange = currentGeneralHours + newClassTotal;
+    } else {
+      // For general hour changes, keep class hours as they are
+      totalForTypeWithChange = hours + currentClassHours;
+    }
     
     const available = getAvailableHours(hourTypeId);
     if (totalForTypeWithChange > available) {
@@ -171,7 +176,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
       classAllocations: updatedClassAllocations
     };
     
-    const error = validateAllocation(hourTypeId, hours, true);
+    const error = validateAllocation(hourTypeId, hours, true, classId);
     if (error) {
       setErrors({ ...errors, [`${hourTypeId}-${classId}`]: error });
     } else {
@@ -497,14 +502,29 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                     const hourTypeId = e.target.value;
                     if (hourTypeId && (!allocations[hourTypeId] || getTotalHoursForHourType(hourTypeId) === 0)) {
                       const hourType = hourTypes.find(ht => ht.id === hourTypeId);
-                      const newAllocations = {
-                        ...allocations,
-                        [hourTypeId]: { 
-                          generalHours: hourType?.isClassHour ? 0 : 1, 
-                          classAllocations: {} 
-                        }
-                      };
-                      setAllocations(newAllocations);
+                      
+                      if (hourType?.isClassHour) {
+                        // For class hour types, start with 1 general hour
+                        // User can then choose to allocate to specific classes
+                        const newAllocations = {
+                          ...allocations,
+                          [hourTypeId]: { 
+                            generalHours: 1, 
+                            classAllocations: {}
+                          }
+                        };
+                        setAllocations(newAllocations);
+                      } else {
+                        // For regular hour types, add 1 general hour
+                        const newAllocations = {
+                          ...allocations,
+                          [hourTypeId]: { 
+                            generalHours: 1, 
+                            classAllocations: {} 
+                          }
+                        };
+                        setAllocations(newAllocations);
+                      }
                     }
                     e.target.value = '';
                   }}
@@ -603,7 +623,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                         </div>
                       </div>
 
-                      {/* General Hours (for non-class hour types or general allocation) */}
+                      {/* General Hours (for non-class hour types) */}
                       {!hourType.isClassHour && (
                         <div className="border rounded-lg p-3">
                           <div className="flex items-center gap-4">

@@ -1,21 +1,23 @@
 # AcadeMaster - מערכת חלוקת שעות למורים
 
-מערכת ניהול וחלוקת שעות הוראה לבתי ספר יסודיים, בנויה עם Next.js 14, TypeScript, Tailwind CSS ו-Firebase.
+מערכת ניהול וחלוקת שעות הוראה לבתי ספר יסודיים, בנויה עם Next.js 14, TypeScript, Tailwind CSS ו-Firebase Realtime Database.
 
 ## תכונות עיקריות
 
 - 🕐 **ניהול סוגי שעות** - יצירה וניהול של קטגוריות שעות גלובליות
 - 📊 **תרחישי חלוקה** - יצירת סביבות חלוקה עצמאיות עם בנקי שעות
 - 👥 **ניהול מורים וכיתות** - הוספה וניהול של מורים וכיתות בתוך התרחישים
-- 📈 **דוחות ניתוח** - מעקב אחר ניצול שעות ויעילות החלוקה
-- 📤 **ייצוא וייבוא** - העברת נתונים בין תרחישים שונים
+- ⚡ **הקצאת שעות חכמה** - הקצאה עם בדיקות תקינות ומעקב אחר בנקי שעות
+- 📈 **דוחות ניתוח מפורטים** - דוחות עם אחוזי ניצול וייצוא לאקסל
+- 📤 **ייצוא וייבוא** - העברת נתונים בין תרחישים שונים עם אימות
+- 🔐 **אימות Google** - מערכת משתמשים מאובטחת עם הפרדת נתונים
 - 🌐 **תמיכה מלאה בעברית** - ממשק RTL מותאם לעברית
 
 ## דרישות מערכת
 
 - Node.js 18+ 
 - npm או yarn
-- Firebase project עם Firestore
+- Firebase project עם Realtime Database ו-Authentication
 
 ## התקנה
 
@@ -40,7 +42,7 @@
    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
    NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-   NEXT_PUBLIC_FIREBASE_DATABASE_ID=me-west1
+   NEXT_PUBLIC_FIREBASE_DATABASE_URL=https://your_project-default-rtdb.europe-west1.firebasedatabase.app/
    ```
 
 4. **הפעלת שרת הפיתוח:**
@@ -56,22 +58,27 @@
 
 1. עבור ל[Firebase Console](https://console.firebase.google.com/)
 2. צור פרויקט חדש או בחר פרויקט קיים
-3. הפעל Firestore Database:
-   - בחר "Start in production mode"
-   - בחר באזור `me-west1 (Middle East West 1)`
-   - שם המסד: `me-west1`
+3. הפעל Realtime Database:
+   - בחר "Create Database"
+   - בחר באזור `europe-west1 (Belgium)`
+   - בחר "Start in locked mode"
+4. הפעל Authentication:
+   - עבור ל-Authentication > Sign-in method
+   - הפעל Google sign-in provider
+   - הוסף את הדומיין שלך לרשימת הדומיינים המורשים
 
 ### הגדרת כללי אבטחה
 
-הוסף כללי אבטחה בסיסיים ל-Firestore:
+הוסף כללי אבטחה בסיסיים ל-Realtime Database:
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Allow users to read/write their own data
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+```json
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
     }
   }
 }
@@ -92,7 +99,10 @@ src/
 │   └── ...
 ├── lib/                 # כלי עזר והגדרות
 │   ├── firebase.ts      # הגדרת Firebase
-│   ├── database.ts      # פעולות מסד נתונים
+│   ├── database.ts      # פעולות Realtime Database
+│   ├── auth.ts          # פעולות אימות
+│   ├── reports.ts       # מנוע דוחות
+│   ├── reportExport.tsx # ייצוא דוחות לאקסל
 │   └── ...
 ├── types/               # הגדרות TypeScript
 └── contexts/            # React Contexts
@@ -142,11 +152,12 @@ npm run lint       # בדיקת איכות קוד
 **שגיאת חיבור ל-Firebase:**
 - ודא שהפרויקט קיים ב-Firebase Console
 - בדק את נכונות המשתנים ב-`.env.local`
-- ודא שה-Database ID נכון
+- ודא שה-DATABASE_URL נכון וכולל את האזור
 
-**שגיאות הרשאות Firestore:**
+**שגיאות הרשאות Realtime Database:**
 - בדק את כללי האבטחה במסד הנתונים
-- ודא שהמשתמש מחובר כראוי
+- ודא שהמשתמש מחובר כראוי עם Google Authentication
+- ודא שהכללים מאפשרים גישה לנתונים המשתמש בלבד
 
 **בעיות RTL:**
 - ודא שה-HTML כולל `dir="rtl"`

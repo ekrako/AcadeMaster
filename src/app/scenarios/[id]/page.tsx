@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import TeacherManagerWorking from '@/components/TeacherManagerWorking';
 import ClassManagerWorking from '@/components/ClassManagerWorking';
 import ScenarioEditForm from '@/components/ScenarioEditForm';
@@ -12,11 +12,12 @@ import ReportManager from '@/components/ReportManager';
 import { Scenario, Teacher, Class, HourBank } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { getScenario, exportScenario } from '@/lib/database';
+import { getScenario, exportScenario, deleteScenario } from '@/lib/database';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function ScenarioDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const { user } = useAuth();
   const { hourTypes } = useHourTypes();
@@ -120,6 +121,20 @@ export default function ScenarioDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!scenario || !user) return;
+    
+    if (confirm(`האם אתה בטוח שברצונך למחוק את התרחיש "${scenario.name}"?`)) {
+      try {
+        await deleteScenario(user.uid, scenario.id);
+        router.push('/scenarios');
+      } catch (error) {
+        console.error('Error deleting scenario:', error);
+        alert('שגיאה במחיקת התרחיש');
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -184,6 +199,13 @@ export default function ScenarioDetailPage() {
               className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
             >
               ⚙️ עריכת תרחיש
+            </button>
+            <button
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              title="מחק תרחיש"
+            >
+              🗑️ מחיקה
             </button>
           </div>
         </div>

@@ -90,12 +90,18 @@ export default function ScenarioManager() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!user) {
+      alert('נדרש להתחבר כדי למחוק תרחיש');
+      return;
+    }
+
     if (confirm('האם אתה בטוח שברצונך למחוק תרחיש זה?')) {
       try {
-        await deleteScenario(user!.uid, id);
+        await deleteScenario(user.uid, id);
         await loadData();
       } catch (error) {
         console.error('Error deleting scenario:', error);
+        alert(`שגיאה במחיקת התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
       }
     }
   };
@@ -118,8 +124,13 @@ export default function ScenarioManager() {
   };
 
   const handleExport = async (scenarioId: string) => {
+    if (!user) {
+      alert('נדרש להתחבר כדי לייצא תרחיש');
+      return;
+    }
+
     try {
-      const exportData = await exportScenario(user!.uid, scenarioId);
+      const exportData = await exportScenario(user.uid, scenarioId);
       const scenario = scenarios.find(s => s.id === scenarioId);
       const filename = `${scenario?.name || 'תרחיש'}-${new Date().toISOString().split('T')[0]}.json`;
       
@@ -134,7 +145,7 @@ export default function ScenarioManager() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting scenario:', error);
-      alert('שגיאה בייצוא התרחיש');
+      alert(`שגיאה בייצוא התרחיש: ${error instanceof Error ? error.message : 'שגיאה לא ידועה'}`);
     }
   };
 
@@ -333,7 +344,7 @@ export default function ScenarioManager() {
                     className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm"
                     title="ייצא תרחיש"
                   >
-                    📤
+                    ייצוא
                   </button>
                   <button
                     onClick={() => window.location.href = `/scenarios/${scenario.id}`}
