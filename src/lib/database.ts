@@ -288,12 +288,46 @@ export const getScenario = async (userId: string, id: string): Promise<Scenario 
 export const updateScenario = async (userId: string, id: string, updates: Partial<Scenario>) => {
   return withErrorHandling(async () => {
     checkDatabase();
-    const sanitizedUpdates = sanitizeData({
+    
+    // Fetch the latest scenario data first
+    const scenarioRef = ref(db!, `users/${userId}/scenarios/${id}`);
+    const snapshot = await get(scenarioRef);
+    
+    if (!snapshot.exists()) {
+      throw new Error('Scenario not found');
+    }
+    
+    const existingScenario = snapshot.val();
+    
+    // Merge existing data with updates
+    const mergedUpdates = {
+      ...existingScenario,
       ...updates,
       updatedAt: serverTimestamp()
-    });
-    await update(ref(db!, `users/${userId}/scenarios/${id}`), sanitizedUpdates);
+    };
+    
+    const sanitizedUpdates = sanitizeData(mergedUpdates);
+    
+    await set(scenarioRef, sanitizedUpdates);
   }, 'updateScenario');
+};
+
+export const updateScenarioPartial = async (userId: string, id: string, updates: Partial<Scenario>) => {
+  return withErrorHandling(async () => {
+    checkDatabase();
+    
+    const scenarioRef = ref(db!, `users/${userId}/scenarios/${id}`);
+    
+    // Create a new object for updates to ensure `updatedAt` is always included
+    const updatesToApply = {
+      ...updates,
+      updatedAt: serverTimestamp()
+    };
+    
+    const sanitizedUpdates = sanitizeData(updatesToApply);
+    
+    await update(scenarioRef, sanitizedUpdates);
+  }, 'updateScenarioPartial');
 };
 
 export const deleteScenario = async (userId: string, id: string) => {

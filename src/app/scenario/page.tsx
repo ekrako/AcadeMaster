@@ -9,11 +9,18 @@ import ScenarioEditForm from '@/components/ScenarioEditForm';
 import AllocationManagerWorking from '@/components/AllocationManagerWorking';
 import ClassAllocationDisplay from '@/components/ClassAllocationDisplay';
 import ReportManager from '@/components/ReportManager';
-import { Scenario, Teacher, Class, HourBank } from '@/types';
+import { Scenario, Teacher, Class, HourBank, Allocation } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFlash } from '@/contexts/FlashContext';
-import { getScenario, updateScenario, exportScenario, deleteScenario, duplicateScenario } from '@/lib/database';
+import { 
+  getScenario, 
+  updateScenario, 
+  updateScenarioPartial, 
+  exportScenario, 
+  deleteScenario, 
+  duplicateScenario 
+} from '@/lib/database';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 function ScenarioDetailPageContent() {
@@ -34,21 +41,12 @@ function ScenarioDetailPageContent() {
     }
   }, [id, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save scenario when component unmounts (navigating away)
-  useEffect(() => {
-    return () => {
-      if (scenario && user) {
-        console.log('Auto-saving scenario on component unmount:', scenario.name);
-        saveScenario(scenario);
-      }
-    };
-  }, [scenario, user]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const loadScenario = async () => {
     if (!user || !id) {
       return;
     }
     
+    setLoading(true);
     try {
       const scenarioData = await getScenario(user.uid, id);
       if (scenarioData) {
@@ -62,11 +60,12 @@ function ScenarioDetailPageContent() {
         };
         setScenario(normalizedScenario);
       } else {
-        // Scenario not found
+        showFlash('תרחיש לא נמצא.', 'error');
         setScenario(null);
       }
     } catch (error) {
       console.error('Error loading scenario:', error);
+      showFlash('שגיאה בטעינת התרחיש.', 'error');
     } finally {
       setLoading(false);
     }
@@ -82,52 +81,68 @@ function ScenarioDetailPageContent() {
     }));
   };
 
-  const saveScenario = async (scenarioToSave: Scenario) => {
-    if (!user) {
-      return;
-    }
-    try {
-      console.log('Saving scenario to database:', scenarioToSave.name, {
-        teachers: scenarioToSave.teachers?.length || 0,
-        classes: scenarioToSave.classes?.length || 0,
-        allocations: scenarioToSave.allocations?.length || 0
-      });
-      await updateScenario(user.uid, scenarioToSave.id, scenarioToSave);
-      console.log('Scenario saved successfully');
-    } catch (error) {
-      console.error('Error saving scenario:', error);
-      // Optionally, show an error message to the user
-    }
-  };
-
   const handleTeachersUpdate = async (teachers: Teacher[]) => {
-    if (!scenario) {
-      return;
+    if (!scenario || !user) return;
+    
+    try {
+      // Optimistic UI update
+      setScenario(prev => prev ? { ...prev, teachers } : null);
+      await updateScenarioPartial(user.uid, scenario.id, { teachers });
+      showFlash('רשימת המורים עודכנה', 'success');
+    } catch (error) {
+      console.error('Error updating teachers:', error);
+      showFlash('שגיאה בעדכון המורים', 'error');
+      loadScenario(); // Revert on error
     }
-    console.log('Teachers updated, saving to database:', teachers.length, 'teachers');
-    const updatedScenario = { ...scenario, teachers, updatedAt: new Date() };
-    setScenario(updatedScenario);
-    await saveScenario(updatedScenario);
   };
 
   const handleClassesUpdate = async (classes: Class[]) => {
-    if (!scenario) {
-      return;
+    if (!scenario || !user) return;
+    
+    try {
+      // Optimistic UI update
+      setScenario(prev => prev ? { ...prev, classes } : null);
+      await updateScenarioPartial(user.uid, scenario.id, { classes });
+      showFlash('רשימת הכיתות עודכנה', 'success');
+    } catch (error) {
+      console.error('Error updating classes:', error);
+      showFlash('שגיאה בעדכון הכיתות', 'error');
+      loadScenario(); // Revert on error
     }
-    console.log('Classes updated, saving to database:', classes.length, 'classes');
-    const updatedScenario = { ...scenario, classes, updatedAt: new Date() };
-    setScenario(updatedScenario);
-    await saveScenario(updatedScenario);
   };
 
-  const handleScenarioUpdate = async (updatedScenario: Scenario) => {
-    setScenario(updatedScenario);
-    await saveScenario(updatedScenario);
-    setShowEditForm(false);
+  const handleScenarioUpdate = async (updatedData: Partial<Scenario>) => {
+    if (!scenario || !user) return;
+
+    try {
+      // Optimistic UI update
+      setScenario(prev => prev ? { ...prev, ...updatedData } : null);
+      await updateScenario(user.uid, scenario.id, updatedData);
+      setShowEditForm(false);
+      showFlash('פרטי התרחיש עודכנו', 'success');
+      
+      // Update page title if name changed
+      if (updatedData.name && typeof document !== 'undefined') {
+        document.title = `${updatedData.name} - AcadeMaster`;
+      }
+    } catch (error) {
+      console.error('Error updating scenario:', error);
+      showFlash('שגיאה בעדכון התרחיש', 'error');
+      loadScenario(); // Revert on error
+    }
+  };
+  
+  const handleAllocationsUpdate = async (updatedScenario: Scenario) => {
+    if (!scenario || !user) return;
     
-    // Update page title
-    if (typeof document !== 'undefined') {
-      document.title = `${updatedScenario.name} - AcadeMaster`;
+    try {
+      setScenario(updatedScenario);
+      await updateScenario(user.uid, scenario.id, updatedScenario);
+      showFlash('ההקצאות עודכנו', 'success');
+    } catch (error) {
+      console.error('Error updating allocations:', error);
+      showFlash('שגיאה בעדכון ההקצאות', 'error');
+      loadScenario();
     }
   };
 
@@ -496,7 +511,7 @@ function ScenarioDetailPageContent() {
           <div className="bg-white p-6 rounded-lg shadow-md border">
             <AllocationManagerWorking
               scenario={scenario}
-              onUpdate={handleScenarioUpdate}
+              onUpdate={handleAllocationsUpdate}
             />
           </div>
         )}
