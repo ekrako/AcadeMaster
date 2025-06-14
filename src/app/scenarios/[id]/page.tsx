@@ -8,6 +8,7 @@ import ClassManagerWorking from '@/components/ClassManagerWorking';
 import ScenarioEditForm from '@/components/ScenarioEditForm';
 import AllocationManagerWorking from '@/components/AllocationManagerWorking';
 import ClassAllocationDisplay from '@/components/ClassAllocationDisplay';
+import ReportManager from '@/components/ReportManager';
 import { Scenario, Teacher, Class, HourBank } from '@/types';
 import { useHourTypes } from '@/contexts/HourTypesContext';
 import { exportScenario } from '@/lib/database';
@@ -453,13 +454,7 @@ export default function ScenarioDetailPage() {
         )}
 
         {activeTab === 'reports' && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-            <div className="text-yellow-600 text-4xl mb-4">🚧</div>
-            <h3 className="text-xl font-semibold text-yellow-800 mb-2">בפיתוח</h3>
-            <p className="text-yellow-700">
-              מערכת הדוחות תהיה זמינה בקרוב.
-            </p>
-          </div>
+          <ReportManager scenario={scenario} hourTypes={hourTypes} />
         )}
       </div>
     </div>

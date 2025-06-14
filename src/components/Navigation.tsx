@@ -7,7 +7,6 @@ const navigationItems = [
   { href: '/', label: 'בית', icon: '🏠' },
   { href: '/hour-types', label: 'סוגי שעות', icon: '⏰' },
   { href: '/scenarios', label: 'תרחישים', icon: '📋' },
-  { href: '/reports', label: 'דוחות', icon: '📊' },
 ];
 
 export default function Navigation() {
