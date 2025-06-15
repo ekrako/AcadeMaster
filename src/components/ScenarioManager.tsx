@@ -354,7 +354,11 @@ export default function ScenarioManager() {
           </div>
         ) : (
           scenarios.map(scenario => (
-            <div key={scenario.id} className="bg-white p-6 rounded-lg shadow-md border">
+            <div 
+              key={scenario.id} 
+              className="bg-white p-6 rounded-lg shadow-md border cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => window.location.href = `/scenario?id=${scenario.id}`}
+            >
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-xl font-semibold">{scenario.name}</h3>
@@ -367,13 +371,12 @@ export default function ScenarioManager() {
                   </p>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => handleExport(scenario.id)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm"
-                    title="ייצא תרחיש"
+                    onClick={() => window.location.href = `/scenario?id=${scenario.id}`}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
                   >
-                    ייצוא
+                    עריכה
                   </button>
                   <button
                     onClick={() => handleDuplicate(scenario.id)}
@@ -383,10 +386,11 @@ export default function ScenarioManager() {
                     שכפול
                   </button>
                   <button
-                    onClick={() => window.location.href = `/scenario?id=${scenario.id}`}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
+                    onClick={() => handleExport(scenario.id)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm"
+                    title="ייצא תרחיש"
                   >
-                    עריכה
+                    ייצוא
                   </button>
                   <button
                     onClick={() => handleDelete(scenario.id)}

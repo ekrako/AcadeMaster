@@ -236,9 +236,9 @@ function ScenarioDetailPageContent() {
       <div className="mb-6">
         <Link 
           href="/scenarios" 
-          className="text-blue-600 hover:text-blue-800 mb-4 inline-flex items-center gap-2"
+          className="bg-blue-100 hover:bg-blue-200 text-blue-800 hover:text-blue-900 px-4 py-2 rounded-lg mb-4 inline-flex items-center gap-2 font-medium transition-colors"
         >
-          ← חזור לתרחישים
+          → חזור לתרחישים
         </Link>
         <div className="flex items-center justify-between">
           <div>
@@ -256,11 +256,10 @@ function ScenarioDetailPageContent() {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={handleExport}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-              title="ייצא תרחיש"
+              onClick={() => setShowEditForm(true)}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
             >
-              📤 ייצוא
+              ⚙️ עריכת תרחיש
             </button>
             <button
               onClick={handleDuplicate}
@@ -270,10 +269,11 @@ function ScenarioDetailPageContent() {
               📋 שכפול
             </button>
             <button
-              onClick={() => setShowEditForm(true)}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              onClick={handleExport}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+              title="ייצא תרחיש"
             >
-              ⚙️ עריכת תרחיש
+              📤 ייצוא
             </button>
             <button
               onClick={handleDelete}
@@ -372,7 +372,7 @@ function ScenarioDetailPageContent() {
             {/* Scenario Overview */}
             <div className="bg-white p-6 rounded-lg shadow-md border">
               <h2 className="text-xl font-semibold mb-4">סקירת התרחיש</h2>
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-4 gap-4">
                 <button
                   onClick={() => setActiveTab('teachers')}
                   className="bg-blue-50 p-4 rounded-lg hover:bg-blue-100 transition-colors text-right cursor-pointer border-2 border-transparent hover:border-blue-200"
@@ -396,6 +396,16 @@ function ScenarioDetailPageContent() {
                   <h3 className="font-medium text-purple-800">הקצאות</h3>
                   <div className="text-2xl font-bold text-purple-600">{scenario.allocations?.length || 0}</div>
                   <p className="text-sm text-purple-600">הקצאות פעילות</p>
+                </button>
+                <button
+                  onClick={() => setShowEditForm(true)}
+                  className="bg-orange-50 p-4 rounded-lg hover:bg-orange-100 transition-colors text-right cursor-pointer border-2 border-transparent hover:border-orange-200"
+                >
+                  <h3 className="font-medium text-orange-800">סה״כ שעות</h3>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {(scenario.hourBanks || []).reduce((sum, bank) => sum + bank.totalHours, 0)}
+                  </div>
+                  <p className="text-sm text-orange-600">בבנק השעות</p>
                 </button>
               </div>
             </div>
