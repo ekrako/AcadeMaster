@@ -19,6 +19,8 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
   }>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showAllocationForm, setShowAllocationForm] = useState(false);
+  const [sessionAddedHourTypes, setSessionAddedHourTypes] = useState<Set<string>>(new Set());
+  const [sessionAddedClasses, setSessionAddedClasses] = useState<Record<string, Set<string>>>({}); // hourTypeId -> Set of classIds
 
   // Auto-select teacher if provided
   useEffect(() => {
@@ -168,7 +170,12 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
     if (hours > 0) {
       updatedClassAllocations[classId] = hours;
     } else {
-      delete updatedClassAllocations[classId];
+      // Keep class with 0 hours if it's in session state, otherwise delete it
+      if (sessionAddedClasses[hourTypeId]?.has(classId)) {
+        updatedClassAllocations[classId] = 0;
+      } else {
+        delete updatedClassAllocations[classId];
+      }
     }
     
     const updatedAllocation = {
@@ -281,6 +288,8 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
     if (!preSelectedTeacher) {
       setShowAllocationForm(false);
       setSelectedTeacher(null);
+      setSessionAddedHourTypes(new Set());
+      setSessionAddedClasses({});
     }
   };
 
@@ -503,23 +512,26 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                     if (hourTypeId && (!allocations[hourTypeId] || getTotalHoursForHourType(hourTypeId) === 0)) {
                       const hourType = hourTypes.find(ht => ht.id === hourTypeId);
                       
+                      // Add to session state to keep it visible even with 0 hours
+                      setSessionAddedHourTypes(prev => new Set([...prev, hourTypeId]));
+                      
                       if (hourType?.isClassHour) {
-                        // For class hour types, start with 1 general hour
+                        // For class hour types, start with 0 hours
                         // User can then choose to allocate to specific classes
                         const newAllocations = {
                           ...allocations,
                           [hourTypeId]: { 
-                            generalHours: 1, 
+                            generalHours: 0, 
                             classAllocations: {}
                           }
                         };
                         setAllocations(newAllocations);
                       } else {
-                        // For regular hour types, add 1 general hour
+                        // For regular hour types, start with 0 hours
                         const newAllocations = {
                           ...allocations,
                           [hourTypeId]: { 
-                            generalHours: 1, 
+                            generalHours: 0, 
                             classAllocations: {} 
                           }
                         };
@@ -533,7 +545,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                 >
                   <option value="">+ הוסף סוג שעות</option>
                   {hourTypes
-                    .filter(ht => !allocations[ht.id] || getTotalHoursForHourType(ht.id) === 0)
+                    .filter(ht => (!allocations[ht.id] || getTotalHoursForHourType(ht.id) === 0) && !sessionAddedHourTypes.has(ht.id))
                     .map(hourType => (
                       <option key={hourType.id} value={hourType.id}>
                         {hourType.name} ({getAvailableHours(hourType.id)} זמינות)
@@ -545,7 +557,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
             </div>
 
             <div className="space-y-4 mb-6">
-              {Object.keys(allocations).filter(hourTypeId => getTotalHoursForHourType(hourTypeId) > 0).length === 0 && (
+              {Object.keys(allocations).filter(hourTypeId => getTotalHoursForHourType(hourTypeId) > 0 || sessionAddedHourTypes.has(hourTypeId)).length === 0 && (
                 <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
                   <div className="text-4xl mb-2">⏰</div>
                   <p className="text-lg font-medium mb-1">אין הקצאות שעות</p>
@@ -554,7 +566,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
               )}
               
               {Object.keys(allocations)
-                .filter(hourTypeId => getTotalHoursForHourType(hourTypeId) > 0)
+                .filter(hourTypeId => getTotalHoursForHourType(hourTypeId) > 0 || sessionAddedHourTypes.has(hourTypeId))
                 .map(hourTypeId => {
                   const hourType = hourTypes.find(ht => ht.id === hourTypeId);
                   if (!hourType) return null;
@@ -587,6 +599,12 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                             const updatedAllocations = { ...allocations };
                             delete updatedAllocations[hourType.id];
                             setAllocations(updatedAllocations);
+                            // Remove from session state so it can be re-added
+                            setSessionAddedHourTypes(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(hourType.id);
+                              return newSet;
+                            });
                             // Clear any errors for this hour type
                             const updatedErrors = { ...errors };
                             Object.keys(updatedErrors).forEach(key => {
@@ -650,8 +668,25 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                             <select
                               onChange={(e) => {
                                 const classId = e.target.value;
-                                if (classId && !allocation.classAllocations[classId]) {
-                                  handleClassHoursChange(hourType.id, classId, 1);
+                                if (classId && !allocation.classAllocations.hasOwnProperty(classId)) {
+                                  // First update session state
+                                  const newSessionState = {
+                                    ...sessionAddedClasses,
+                                    [hourType.id]: new Set([...(sessionAddedClasses[hourType.id] || []), classId])
+                                  };
+                                  setSessionAddedClasses(newSessionState);
+                                  
+                                  // Then directly add to allocations with 0 hours
+                                  const currentAllocation = allocations[hourType.id] || { generalHours: 0, classAllocations: {} };
+                                  const updatedClassAllocations = { ...currentAllocation.classAllocations };
+                                  updatedClassAllocations[classId] = 0;
+                                  
+                                  const updatedAllocation = {
+                                    ...currentAllocation,
+                                    classAllocations: updatedClassAllocations
+                                  };
+                                  
+                                  setAllocations({ ...allocations, [hourType.id]: updatedAllocation });
                                 }
                                 e.target.value = '';
                               }}
@@ -660,7 +695,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                             >
                               <option value="">+ הוסף כיתה</option>
                               {scenario.classes
-                                .filter(cls => !allocation.classAllocations[cls.id] || allocation.classAllocations[cls.id] === 0)
+                                .filter(cls => !allocation.classAllocations.hasOwnProperty(cls.id) && !(sessionAddedClasses[hourType.id]?.has(cls.id)))
                                 .map(cls => (
                                   <option key={cls.id} value={cls.id}>
                                     {cls.name} (שכבה {cls.grade})
@@ -670,10 +705,9 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                             </select>
                           </div>
                           
-                          {/* Show only allocated classes */}
+                          {/* Show allocated classes and session-added classes */}
                           <div className="space-y-3 max-h-60 overflow-y-auto">
                             {Object.entries(allocation.classAllocations)
-                              .filter(([_, hours]) => hours > 0)
                               .map(([classId, classHours]) => {
                                 const cls = scenario.classes.find(c => c.id === classId);
                                 if (!cls) return null;
@@ -700,7 +734,37 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                                         placeholder="0"
                                       />
                                       <button
-                                        onClick={() => handleClassHoursChange(hourType.id, classId, 0)}
+                                        onClick={() => {
+                                          // Remove from session state and directly remove from allocations
+                                          setSessionAddedClasses(prev => {
+                                            const newState = { ...prev };
+                                            if (newState[hourType.id]) {
+                                              newState[hourType.id] = new Set(newState[hourType.id]);
+                                              newState[hourType.id].delete(classId);
+                                              if (newState[hourType.id].size === 0) {
+                                                delete newState[hourType.id];
+                                              }
+                                            }
+                                            return newState;
+                                          });
+                                          
+                                          // Directly remove from allocations
+                                          const currentAllocation = allocations[hourType.id] || { generalHours: 0, classAllocations: {} };
+                                          const updatedClassAllocations = { ...currentAllocation.classAllocations };
+                                          delete updatedClassAllocations[classId];
+                                          
+                                          const updatedAllocation = {
+                                            ...currentAllocation,
+                                            classAllocations: updatedClassAllocations
+                                          };
+                                          
+                                          setAllocations({ ...allocations, [hourType.id]: updatedAllocation });
+                                          
+                                          // Clear any errors for this class
+                                          const updatedErrors = { ...errors };
+                                          delete updatedErrors[`${hourType.id}-${classId}`];
+                                          setErrors(updatedErrors);
+                                        }}
                                         className="text-red-600 hover:text-red-800 text-sm px-1"
                                         title="הסר כיתה"
                                       >
@@ -716,7 +780,7 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                             }
                           </div>
                           
-                          {Object.keys(allocation.classAllocations).filter(classId => allocation.classAllocations[classId] > 0).length === 0 && (
+                          {Object.keys(allocation.classAllocations).length === 0 && (
                             <div className="text-center py-4 text-gray-500 text-sm">
                               לא נבחרו כיתות עדיין. השתמש בכפתור "הוסף כיתה" למעלה
                             </div>
@@ -766,6 +830,8 @@ export default function AllocationManagerWorking({ scenario, onUpdate, preSelect
                     setSelectedTeacher(null);
                   }
                   setErrors({});
+                  setSessionAddedHourTypes(new Set());
+                  setSessionAddedClasses({});
                 }}
                 className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg"
               >
