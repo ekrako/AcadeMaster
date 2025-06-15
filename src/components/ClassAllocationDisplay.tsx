@@ -55,6 +55,43 @@ export default function ClassAllocationDisplay({ scenario }: ClassAllocationDisp
     };
   }).filter(item => item.allocations.length > 0);
 
+  // Group classes by grade level
+  const allocationsByGrade = allocationsByClass.reduce((acc, item) => {
+    const grade = item.class.grade;
+    // Skip classes without a valid grade
+    if (!grade) {
+      return acc;
+    }
+    if (!acc[grade]) {
+      acc[grade] = [];
+    }
+    acc[grade].push(item);
+    return acc;
+  }, {} as Record<string, Array<{ class: any; allocations: any[] }>>);
+
+  // Sort grades - handle both Hebrew letters and numbers
+  const sortedGrades = Object.keys(allocationsByGrade).sort((a, b) => {
+    // Try to parse as numbers first
+    const numA = parseInt(a);
+    const numB = parseInt(b);
+    
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
+    }
+    
+    // Hebrew grade order: א, ב, ג, ד, ה, ו
+    const hebrewOrder = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט', 'י', 'יא', 'יב'];
+    const indexA = hebrewOrder.indexOf(a);
+    const indexB = hebrewOrder.indexOf(b);
+    
+    if (indexA !== -1 && indexB !== -1) {
+      return indexA - indexB;
+    }
+    
+    // Fallback to string comparison
+    return a.localeCompare(b);
+  });
+
   // Get allocations without class assignment (non-class hours)
   const generalAllocations = scenario.allocations.filter(a => {
     const hasClassIds = a.classIds && a.classIds.length > 0;
@@ -76,8 +113,103 @@ export default function ClassAllocationDisplay({ scenario }: ClassAllocationDisp
 
   return (
     <div className="space-y-6">
-      {/* Class Allocations */}
-      {allocationsByClass.length > 0 && (
+      {/* Class Allocations Grouped by Grade */}
+      {allocationsByClass.length > 0 && sortedGrades.length > 0 && (
+        <div>
+          <h4 className="text-lg font-semibold mb-4">הקצאות לכיתות</h4>
+          <div className="space-y-6">
+            {sortedGrades.map(grade => {
+              const gradeClasses = allocationsByGrade[grade] || [];
+              const gradeTotalHours = gradeClasses.reduce((sum, item) => 
+                sum + (item.allocations || []).reduce((allocSum, alloc) => allocSum + (alloc.hours || 0), 0), 0
+              );
+
+              if (gradeClasses.length === 0) {
+                return null;
+              }
+              
+              return (
+                <div key={grade} className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <h5 className="text-lg font-semibold text-gray-800">שכבה {grade}</h5>
+                      <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
+                        {gradeClasses.length} כיתות
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      סה״כ שעות: <strong className="text-blue-700">{gradeTotalHours}</strong>
+                    </div>
+                  </div>
+                  
+                  <div className="grid gap-4">
+                    {gradeClasses.map(({ class: cls, allocations }) => {
+                      if (!cls || !allocations) {
+                        return null;
+                      }
+                      return (
+                      <div key={cls.id} className="bg-white border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <h6 className="font-semibold text-lg">{cls.name}</h6>
+                            <span className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
+                              {cls.studentCount} תלמידים
+                            </span>
+                            {cls.isSpecialEducation && (
+                              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">
+                                חינוך מיוחד
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            סה״כ שעות: <strong>{(allocations || []).reduce((sum, a) => sum + (a.hours || 0), 0)}</strong>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {(allocations || []).map(allocation => {
+                            const otherClasses = getOtherClassNames(allocation, cls.id);
+                            return (
+                              <div 
+                                key={allocation.id} 
+                                className="flex items-center justify-between p-3 rounded-lg border-l-4"
+                                style={{ borderLeftColor: getHourTypeColor(allocation.hourTypeId) }}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: getHourTypeColor(allocation.hourTypeId) }}
+                                  />
+                                  <span className="font-medium">{getHourTypeName(allocation.hourTypeId)}</span>
+                                  <span className="text-sm text-gray-600">
+                                    {allocation.hours} שעות
+                                  </span>
+                                  {otherClasses && (
+                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                      גם עם: {otherClasses}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  מורה: <strong>{getTeacherName(allocation.teacherId)}</strong>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: Class Allocations (Ungrouped) */}
+      {allocationsByClass.length > 0 && sortedGrades.length === 0 && (
         <div>
           <h4 className="text-lg font-semibold mb-4">הקצאות לכיתות</h4>
           <div className="grid gap-4">
@@ -97,12 +229,12 @@ export default function ClassAllocationDisplay({ scenario }: ClassAllocationDisp
                     )}
                   </div>
                   <div className="text-sm text-gray-600">
-                    סה״כ שעות: <strong>{allocations.reduce((sum, a) => sum + a.hours, 0)}</strong>
+                    סה״כ שעות: <strong>{(allocations || []).reduce((sum, a) => sum + (a.hours || 0), 0)}</strong>
                   </div>
                 </div>
                 
                 <div className="space-y-2">
-                  {allocations.map(allocation => {
+                  {(allocations || []).map(allocation => {
                     const otherClasses = getOtherClassNames(allocation, cls.id);
                     return (
                       <div 
