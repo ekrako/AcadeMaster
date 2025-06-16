@@ -57,7 +57,7 @@ jobs:
           
           # Check if we have service account credentials
           if [ -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
-            echo "Using service account authentication"
+            echo "✅ Using service account authentication"
             echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > $HOME/gcp-key.json
             export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json
             
@@ -69,21 +69,15 @@ jobs:
               echo "✅ Deployed to preview channel: $CHANNEL_ID"
             fi
             
-          elif [ -n "$FIREBASE_TOKEN" ]; then
-            echo "⚠️  Using deprecated token authentication"
-            
-            if [ "$DEPLOY_TYPE" = "live" ]; then
-              firebase deploy --only hosting --project academaster-1 --token "$FIREBASE_TOKEN"
-              echo "✅ Deployed to: https://academaster-1.web.app"
-            else
-              firebase hosting:channel:deploy $CHANNEL_ID --project academaster-1 --token "$FIREBASE_TOKEN"
-              echo "✅ Deployed to preview channel: $CHANNEL_ID"
-            fi
-            
           else
-            echo "❌ No authentication method available."
-            echo "Please set up either GOOGLE_APPLICATION_CREDENTIALS_JSON or FIREBASE_TOKEN secret."
-            echo "For service account setup: https://firebase.google.com/docs/admin/setup#initialize-sdk"
+            echo "❌ Service account credentials not found."
+            echo "Please set up the GOOGLE_APPLICATION_CREDENTIALS_JSON secret in GitHub repository settings."
+            echo ""
+            echo "📋 Setup instructions:"
+            echo "   1. Go to: https://console.firebase.google.com/project/academaster-1/settings/serviceaccounts/adminsdk"
+            echo "   2. Generate a new private key"
+            echo "   3. Add the JSON content as GOOGLE_APPLICATION_CREDENTIALS_JSON secret"
+            echo "   4. Or run: ./add-service-account-secret.sh path/to/service-account.json"
             exit 1
           fi
           
@@ -97,4 +91,3 @@ jobs:
           fi
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

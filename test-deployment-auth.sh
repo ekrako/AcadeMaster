@@ -26,7 +26,7 @@ echo ""
 echo "🔑 Checking GitHub repository secrets..."
 
 if gh secret list | grep -q "GOOGLE_APPLICATION_CREDENTIALS_JSON"; then
-    echo "✅ GOOGLE_APPLICATION_CREDENTIALS_JSON - Found (Preferred method)"
+    echo "✅ GOOGLE_APPLICATION_CREDENTIALS_JSON - Found (Required)"
     SERVICE_ACCOUNT_AVAILABLE=true
 else
     echo "❌ GOOGLE_APPLICATION_CREDENTIALS_JSON - Not found"
@@ -34,49 +34,47 @@ else
 fi
 
 if gh secret list | grep -q "FIREBASE_TOKEN"; then
-    echo "⚠️  FIREBASE_TOKEN - Found (Deprecated method)"
+    echo "⚠️  FIREBASE_TOKEN - Found (No longer used - can be removed)"
     TOKEN_AVAILABLE=true
 else
-    echo "❌ FIREBASE_TOKEN - Not found"
+    echo "ℹ️  FIREBASE_TOKEN - Not found (No longer needed)"
     TOKEN_AVAILABLE=false
 fi
 
 echo ""
 
 # Determine which authentication method will be used
-echo "🎯 Authentication method that will be used in GitHub Actions:"
+echo "🎯 Authentication status for GitHub Actions:"
 
 if [ "$SERVICE_ACCOUNT_AVAILABLE" = true ]; then
-    echo "✅ Service Account Authentication (Recommended)"
+    echo "✅ Service Account Authentication - Ready"
     echo "   • No deprecation warnings"
-    echo "   • Future-proof"
-    echo "   • More secure"
-elif [ "$TOKEN_AVAILABLE" = true ]; then
-    echo "⚠️  Token Authentication (Deprecated)"
-    echo "   • Will show deprecation warnings"
-    echo "   • Still works but not recommended"
-    echo "   • Should migrate to service account"
+    echo "   • Future-proof and secure"
+    echo "   • Deployments will work"
 else
-    echo "❌ No Authentication Available"
+    echo "❌ Service Account Authentication - Not configured"
     echo "   • Deployments will fail"
-    echo "   • Need to set up either service account or token"
+    echo "   • Must set up service account credentials"
+fi
+
+if [ "$TOKEN_AVAILABLE" = true ]; then
+    echo ""
+    echo "🧹 Cleanup recommendation:"
+    echo "   • FIREBASE_TOKEN secret can be removed (no longer used)"
+    echo "   • Run: gh secret remove FIREBASE_TOKEN"
 fi
 
 echo ""
 
 # Provide next steps
 if [ "$SERVICE_ACCOUNT_AVAILABLE" = false ]; then
-    echo "📋 To set up service account authentication:"
+    echo "📋 Required: Set up service account authentication:"
     echo "   1. Download service account key from Firebase Console:"
     echo "      https://console.firebase.google.com/project/academaster-1/settings/serviceaccounts/adminsdk"
     echo "   2. Run: ./add-service-account-secret.sh path/to/downloaded-key.json"
     echo ""
-fi
-
-if [ "$TOKEN_AVAILABLE" = false ] && [ "$SERVICE_ACCOUNT_AVAILABLE" = false ]; then
-    echo "📋 Or to use token authentication (temporary):"
-    echo "   1. Run: firebase login:ci"
-    echo "   2. Run: gh secret set FIREBASE_TOKEN --body 'your-token-here'"
+    echo "⚠️  Note: Firebase token authentication is no longer supported"
+    echo "   Service account authentication is now required for all deployments"
     echo ""
 fi
 
