@@ -6,14 +6,19 @@ on:
       - master
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Deployment environment'
+      target:
+        description: 'Deployment target'
         required: true
         default: 'live'
         type: choice
         options:
         - live
         - preview
+      channel_id:
+        description: 'Preview channel ID (only for preview deployments)'
+        required: false
+        default: 'manual-deploy'
+        type: string
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -40,20 +45,55 @@ jobs:
         run: |
           npm install -g firebase-tools
           
+          # Determine deployment type
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.target }}" = "preview" ]; then
+            DEPLOY_TYPE="preview"
+            CHANNEL_ID="${{ github.event.inputs.channel_id }}"
+            echo "🔍 Manual preview deployment to channel: $CHANNEL_ID"
+          else
+            DEPLOY_TYPE="live"
+            echo "🚀 Live deployment to production"
+          fi
+          
           # Check if we have service account credentials
           if [ -n "$GOOGLE_APPLICATION_CREDENTIALS_JSON" ]; then
             echo "Using service account authentication"
             echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > $HOME/gcp-key.json
             export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcp-key.json
-            firebase deploy --only hosting --project academaster-1
+            
+            if [ "$DEPLOY_TYPE" = "live" ]; then
+              firebase deploy --only hosting --project academaster-1
+              echo "✅ Deployed to: https://academaster-1.web.app"
+            else
+              firebase hosting:channel:deploy $CHANNEL_ID --project academaster-1
+              echo "✅ Deployed to preview channel: $CHANNEL_ID"
+            fi
+            
           elif [ -n "$FIREBASE_TOKEN" ]; then
             echo "⚠️  Using deprecated token authentication"
-            firebase deploy --only hosting --project academaster-1 --token "$FIREBASE_TOKEN"
+            
+            if [ "$DEPLOY_TYPE" = "live" ]; then
+              firebase deploy --only hosting --project academaster-1 --token "$FIREBASE_TOKEN"
+              echo "✅ Deployed to: https://academaster-1.web.app"
+            else
+              firebase hosting:channel:deploy $CHANNEL_ID --project academaster-1 --token "$FIREBASE_TOKEN"
+              echo "✅ Deployed to preview channel: $CHANNEL_ID"
+            fi
+            
           else
             echo "❌ No authentication method available."
             echo "Please set up either GOOGLE_APPLICATION_CREDENTIALS_JSON or FIREBASE_TOKEN secret."
             echo "For service account setup: https://firebase.google.com/docs/admin/setup#initialize-sdk"
             exit 1
+          fi
+          
+          echo "🎉 Deployment completed!"
+          echo "📋 Deployment details:"
+          echo "   • Branch: ${{ github.ref_name }}"
+          echo "   • Type: $DEPLOY_TYPE"
+          echo "   • Commit: ${{ github.sha }}"
+          if [ "$DEPLOY_TYPE" = "preview" ]; then
+            echo "   • Channel: $CHANNEL_ID"
           fi
         env:
           GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
